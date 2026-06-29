@@ -250,26 +250,13 @@ const makeProblem = stage => {
   };
 };
 function getHint(p) {
-  const {
-    a,
-    b,
-    op,
-    answer
-  } = p;
+  const { a, b, op } = p;
   if (op === "+") {
-    if (a < 10 && a + b > 10) {
-      const toTen = 10 - a,
-        rest = b - toTen;
-      return `Erst bis zur 10: ${a} + ${toTen} = 10. Dann 10 + ${rest} = ${answer}.`;
-    }
-    return `Zähle von ${a} aus ${b} weiter: … ${answer}.`;
+    if (a < 10 && a + b > 10) { const toTen = 10 - a, rest = b - toTen; return `Erst bis zur 10: ${a} + ${toTen} = 10. Dann noch ${rest} weiter.`; }
+    return `Zähle von ${a} aus ${b} weiter.`;
   } else {
-    if (a > 10 && a % 10 < b) {
-      const down = a - 10,
-        rest = b - down;
-      return `Erst bis zur 10: ${a} − ${down} = 10. Dann 10 − ${rest} = ${answer}.`;
-    }
-    return `Nimm ${b} von ${a} weg: … ${answer}.`;
+    if (a > 10 && a % 10 < b) { const down = a - 10, rest = b - down; return `Erst bis zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`; }
+    return `Nimm ${b} von ${a} weg.`;
   }
 }
 const MIN_TOTAL = 25,
@@ -642,6 +629,7 @@ function App() {
   const [doneCount, setDoneCount] = useState(0);
   const [streak, setStreak] = useState(0);
   const [streakMsg, setStreakMsg] = useState(null);
+  const [helpUsed, setHelpUsed] = useState(false);
   const [report, setReport] = useState(null);
   const [resetAsk, setResetAsk] = useState(false);
   const soundOn = useRef(save.settings.sound);
@@ -671,6 +659,7 @@ function App() {
     setStatus("idle");
     setWrong([]);
     setShowHelp(false);
+    setHelpUsed(false);
   }, []);
   const startSession = stageId => {
     stageIdRef.current = stageId;
@@ -698,7 +687,7 @@ function App() {
   const finishSession = useCallback(() => {
     const sess = sessionRef.current;
     const done = sess.results.length;
-    const correct = countTrue(sess.results);
+    const correct = sess.results.filter(c => c === "clean").length;
     const cur = saveRef.current;
     const unlockedNow = computeUnlocked(cur.stages);
     const newFriends = unlockedNow.filter(i => !unlockedAtStart.current.includes(i));
@@ -716,7 +705,8 @@ function App() {
       correct,
       prevDone,
       newFriends,
-      stageId: sess.stageId
+      stageId: sess.stageId,
+      results: sess.results
     });
     setScreen("report");
     if (newFriends.length) setTimeout(() => play("unlock"), 500);
@@ -729,19 +719,20 @@ function App() {
   const handlePick = opt => {
     if (status === "right") return;
     if (opt === problem.answer) {
-      const firstTry = wrong.length === 0;
-      const newStreak = firstTry ? streak + 1 : 0;
+      const category = helpUsed ? "help" : (wrong.length === 0 ? "clean" : "retry");
+      const clean = category === "clean";
+      const newStreak = clean ? streak + 1 : 0;
       setStreak(newStreak);
       play("right");
       setStatus("right");
       setConfetti(true);
-      sessionRef.current.results.push(firstTry);
+      sessionRef.current.results.push(category);
       setDoneCount(d => d + 1);
       const sid = stageIdRef.current;
       const prevSt = saveRef.current.stages[sid] || blankStat();
-      const newSt = updateStageStat(prevSt, firstTry, newStreak);
+      const newSt = updateStageStat(prevSt, clean, newStreak);
       let bonus = 0;
-      if (firstTry && newStreak > 0 && newStreak % 5 === 0) {
+      if (clean && newStreak > 0 && newStreak % 5 === 0) {
         bonus = 5;
         setStreakMsg(`🔥 ${newStreak} in Folge! +5 ⭐`);
         setTimeout(() => setStreakMsg(null), 1800);
@@ -919,13 +910,13 @@ function App() {
     }, "Dein Bericht")), React.createElement("div", {
       className: "zh-bignum"
     }, r.done, React.createElement("small", null, "geschafft")), React.createElement("div", {
-      className: "zh-repdots"
-    }, Array.from({
-      length: Math.min(r.done, 40)
-    }).map((_, i) => React.createElement("span", {
+      className: `zh-repdots${r.results && r.results.length > 40 ? " small" : ""}`
+    }, (r.results || []).slice(0, 80).map((cat, i) => React.createElement("span", {
       key: i,
-      className: `zh-rdot ${i < r.correct ? "g" : "e"}`
+      className: `zh-rdot ${cat}`
     }))), React.createElement("div", {
+      className: "zh-dotlegend"
+    }, React.createElement("span", {className: "zh-rdot clean"}), " allein  ", React.createElement("span", {className: "zh-rdot help"}), " mit Hilfe  ", React.createElement("span", {className: "zh-rdot retry"}), " nach Korrektur"), React.createElement("div", {
       className: "zh-rightlbl"
     }, r.correct, " gleich richtig \u2713"), r.prevDone != null && React.createElement("div", {
       className: "zh-compare"
@@ -1118,6 +1109,7 @@ function App() {
     className: "zh-help",
     onClick: () => {
       play("tap");
+      setHelpUsed(true);
       setShowHelp(s => !s);
     }
   }, showHelp ? "🙈 Hilfe aus" : "💡 Zeig mir's")), showHelp && React.createElement("div", {
@@ -1140,7 +1132,7 @@ function App() {
     }, opt);
   })), status !== "right" && wrong.length > 0 && React.createElement("p", {
     className: "zh-encour"
-  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), React.createElement("div", {
+  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), !streakMsg && React.createElement("div", {
     className: `zh-streakbar${streak >= 1 ? "" : " idle"}`
   }, streak >= 1 ? `🔥 ${streak} richtig in Folge` : "🔥 Sammle eine Serie"), streakMsg && React.createElement("div", {
     className: "zh-streakmsg"
@@ -1180,7 +1172,8 @@ function Styles() {
 .zh-sbadge{position:absolute;top:8px;right:10px;font-size:15px}
 .zh-collectbtn{width:100%;margin-top:18px;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:18px;color:#7C5CDC;background:#fff;padding:14px;border-radius:22px;box-shadow:0 6px 0 #E7E0F7}
 .zh-collectbtn:active{transform:translateY(3px);box-shadow:0 3px 0 #E7E0F7}
-.zh-back{border:none;background:transparent;font-family:'Baloo 2';font-weight:700;font-size:18px;color:#7C5CDC;cursor:pointer;padding:6px 4px}
+.zh-back{border:none;background:#fff;font-family:'Baloo 2';font-weight:700;font-size:18px;color:#7C5CDC;cursor:pointer;padding:8px 16px;border-radius:999px;box-shadow:0 4px 0 #E7E0F7}
+.zh-back:active{transform:translateY(3px);box-shadow:0 1px 0 #E7E0F7}
 .zh-h2{font-family:'Baloo 2';font-weight:800;font-size:28px;color:#7C5CDC;text-align:center;margin:8px 0}
 /* PLAY */
 .zh-playtop{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
@@ -1223,7 +1216,11 @@ function Styles() {
 .zh-bignum{font-family:'Baloo 2';font-weight:800;font-size:74px;line-height:1;color:#FFB000;text-shadow:0 4px 0 #f2c84b55;margin-top:4px;display:flex;flex-direction:column;align-items:center}
 .zh-bignum small{font-family:'Baloo 2';font-weight:700;font-size:16px;color:#9387b3;margin-top:2px}
 .zh-repdots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:280px;margin:12px auto 0}
-.zh-rdot{width:22px;height:22px;border-radius:999px}.zh-rdot.g{background:#FFC93C}.zh-rdot.e{background:#EFEAF9}
+.zh-rdot{display:inline-block;width:22px;height:22px;border-radius:999px}.zh-rdot.g{background:#FFC93C}.zh-rdot.e{background:#EFEAF9}
+.zh-rdot.clean{background:#FFC93C}.zh-rdot.help{background:#FF9F1C}.zh-rdot.retry{background:#E3DBF5}
+.zh-repdots.small .zh-rdot{width:16px;height:16px}
+.zh-dotlegend{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap;font-family:'Baloo 2';font-weight:700;font-size:13px;color:#9387b3;margin-top:8px}
+.zh-dotlegend .zh-rdot{width:14px;height:14px}
 .zh-rightlbl{font-family:'Baloo 2';font-weight:800;color:#1B9C6E;font-size:17px;margin-top:10px}
 .zh-compare{display:flex;align-items:flex-end;justify-content:center;gap:22px;margin:16px 0 4px}
 .zh-bw{display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
@@ -1249,7 +1246,8 @@ function Styles() {
 .zh-rbtns{display:flex;gap:12px;margin-top:18px}
 .zh-primary{flex:2;font-family:'Baloo 2';font-weight:800;font-size:22px;color:#fff;border:none;cursor:pointer;background:#FF6B6B;padding:16px;border-radius:22px;box-shadow:0 6px 0 #E04848}
 .zh-primary:active{transform:translateY(3px);box-shadow:0 3px 0 #E04848}
-.zh-ghost{flex:1;font-family:'Baloo 2';font-weight:700;font-size:24px;color:#7C5CDC;border:none;cursor:pointer;background:#F0EBFB;padding:14px;border-radius:22px}
+.zh-ghost{flex:1;font-family:'Baloo 2';font-weight:700;font-size:24px;color:#7C5CDC;border:none;cursor:pointer;background:#F0EBFB;padding:14px;border-radius:22px;box-shadow:0 6px 0 #C9BFF0}
+.zh-ghost:active{transform:translateY(3px);box-shadow:0 3px 0 #C9BFF0}
 /* ADULT */
 .zh-block{padding:16px 18px;margin-top:14px}
 .zh-blabel{font-family:'Baloo 2';font-weight:700;color:#7C5CDC;margin:0 0 10px;font-size:16px}
