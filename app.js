@@ -260,8 +260,8 @@ function getHint(p) {
       return `Mach erst die 10 voll: ${a} und ${toTen} sind verliebte Zahlen. Nimm ${toTen} von der ${b} – dann bleiben ${rest}. 10 + ${rest} = ${a + b}.`;
     }
     // Tauschaufgabe: von der größeren Zahl aus weiterzählen ist leichter
-    if (b > a) return `Tausch-Trick: ${b} + ${a} ist genauso viel wie ${a} + ${b}. Zähl von ${b} aus ${a} weiter.`;
-    return `Zähle von ${a} aus ${b} weiter.`;
+    if (b > a) return `Tausch-Trick: ${b} + ${a} ist genauso viel. Zähl ab ${b} noch ${a} weiter.`;
+    return `Zähl ab ${a} noch ${b} weiter.`;
   } else {
     // Zehnerübergang nach unten: erst zur 10
     if (a > 10 && a % 10 < b) {
@@ -1159,7 +1159,7 @@ function App() {
     }, opt);
   })), status !== "right" && wrong.length > 0 && React.createElement("p", {
     className: "zh-encour"
-  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), !streakMsg && React.createElement("div", {
+  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal."), !streakMsg && React.createElement("div", {
     className: `zh-streakbar${streak >= 1 ? "" : " idle"}`
   }, streak >= 1 ? `🔥 ${streak} richtig in Folge` : "🔥 Sammle eine Serie"), streakMsg && React.createElement("div", {
     className: "zh-streakmsg"
