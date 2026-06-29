@@ -4,7 +4,40 @@ const {
   useEffect,
   useCallback
 } = React;
-function useSound(enabledRef) {
+const KEY = "numi-save-v1";
+const store = {
+  get(def) {
+    try {
+      const v = localStorage.getItem(KEY);
+      return v == null ? def : JSON.parse(v);
+    } catch (e) {
+      return def;
+    }
+  },
+  set(val) {
+    try {
+      localStorage.setItem(KEY, JSON.stringify(val));
+    } catch (e) {}
+  },
+  clear() {
+    try {
+      localStorage.removeItem(KEY);
+    } catch (e) {}
+  }
+};
+const defaultSave = () => ({
+  v: 1,
+  stars: 0,
+  stages: {},
+  last: null,
+  best: 0,
+  settings: {
+    minutes: 5,
+    sound: true,
+    voice: false
+  }
+});
+function useSound(onRef) {
   const ctxRef = useRef(null);
   const ensure = () => {
     if (!ctxRef.current) {
@@ -14,44 +47,43 @@ function useSound(enabledRef) {
     if (ctxRef.current && ctxRef.current.state === "suspended") ctxRef.current.resume();
     return ctxRef.current;
   };
-  const tone = (freq, start, dur, type = "sine", vol = 0.18) => {
+  const tone = (f, s, d, t = "triangle", v = 0.16) => {
     const ctx = ctxRef.current;
     if (!ctx) return;
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = type;
-    o.frequency.setValueAtTime(freq, ctx.currentTime + start);
-    g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-    g.gain.exponentialRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+    const o = ctx.createOscillator(),
+      g = ctx.createGain();
+    o.type = t;
+    o.frequency.setValueAtTime(f, ctx.currentTime + s);
+    g.gain.setValueAtTime(0.0001, ctx.currentTime + s);
+    g.gain.exponentialRampToValueAtTime(v, ctx.currentTime + s + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + s + d);
     o.connect(g);
     g.connect(ctx.destination);
-    o.start(ctx.currentTime + start);
-    o.stop(ctx.currentTime + start + dur + 0.05);
+    o.start(ctx.currentTime + s);
+    o.stop(ctx.currentTime + s + d + 0.05);
   };
-  const play = useCallback(kind => {
-    if (!enabledRef.current) return;
+  return useCallback(kind => {
+    if (!onRef.current) return;
     const ctx = ensure();
     if (!ctx) return;
     if (kind === "right") {
-      tone(523.25, 0, 0.16, "triangle");
-      tone(659.25, 0.09, 0.16, "triangle");
-      tone(783.99, 0.18, 0.26, "triangle");
+      tone(523, 0, .15);
+      tone(659, .08, .15);
+      tone(784, .16, .24);
     } else if (kind === "retry") {
-      tone(330, 0, 0.18, "sine", 0.14);
-      tone(247, 0.12, 0.22, "sine", 0.12);
+      tone(330, 0, .18, "sine", .13);
+      tone(247, .12, .22, "sine", .11);
     } else if (kind === "unlock") {
-      tone(523, 0, 0.14, "triangle");
-      tone(698, 0.1, 0.14, "triangle");
-      tone(880, 0.2, 0.14, "triangle");
-      tone(1046, 0.3, 0.34, "triangle");
+      tone(523, 0, .13);
+      tone(698, .1, .13);
+      tone(880, .2, .13);
+      tone(1046, .3, .32);
     } else if (kind === "tap") {
-      tone(440, 0, 0.06, "sine", 0.08);
+      tone(440, 0, .05, "sine", .07);
     }
-  }, [enabledRef]);
-  return play;
+  }, [onRef]);
 }
-const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
 const shuffle = arr => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -60,6 +92,8 @@ const shuffle = arr => {
   }
   return a;
 };
+const pickFn = arr => arr[Math.floor(Math.random() * arr.length)];
+const countTrue = a => a.filter(Boolean).length;
 function makeOptions(answer, max) {
   const set = new Set([answer]);
   const near = shuffle([answer - 1, answer + 1, answer - 2, answer + 2, answer + 10, answer - 10, answer + 3]);
@@ -73,51 +107,148 @@ function makeOptions(answer, max) {
   }
   return shuffle([...set]);
 }
-function generateProblem(mode) {
-  let a, b, op, answer, max;
-  if (mode === "plus10") {
-    a = rand(1, 8);
+const gP10 = () => {
+  const a = rand(1, 9),
     b = rand(1, 10 - a);
-    op = "+";
-    answer = a + b;
-    max = 10;
-  } else if (mode === "minus10") {
-    a = rand(3, 10);
-    b = rand(1, a);
-    op = "-";
-    answer = a - b;
-    max = 10;
-  } else if (mode === "plusZ") {
-    do {
-      a = rand(2, 9);
-      b = rand(2, 9);
-    } while (a + b <= 10 || a + b > 18);
-    op = "+";
-    answer = a + b;
-    max = 20;
-  } else if (mode === "minusZ") {
-    do {
-      const r = rand(1, 9);
-      b = rand(2, 9);
-      a = r + b;
-    } while (a < 11 || a > 20);
-    op = "-";
-    answer = a - b;
-    max = 20;
-  } else {
-    const pick = shuffle(["plus10", "minus10", "plusZ", "minusZ", "plusZ", "minusZ"])[0];
-    return generateProblem(pick);
-  }
   return {
     a,
     b,
-    op,
-    answer,
-    max,
-    mode,
-    options: makeOptions(answer, max)
+    op: "+",
+    answer: a + b
   };
-}
+};
+const gM10 = () => {
+  const a = rand(2, 10),
+    b = rand(1, a);
+  return {
+    a,
+    b,
+    op: "-",
+    answer: a - b
+  };
+};
+const gP20 = () => {
+  const a = rand(10, 18),
+    oa = a % 10,
+    b = rand(1, 9 - oa);
+  return {
+    a,
+    b,
+    op: "+",
+    answer: a + b
+  };
+};
+const gM20 = () => {
+  const a = rand(11, 19),
+    oa = a % 10,
+    b = rand(1, oa);
+  return {
+    a,
+    b,
+    op: "-",
+    answer: a - b
+  };
+};
+const gP20Z = () => {
+  let a, b;
+  do {
+    a = rand(2, 9);
+    b = rand(2, 9);
+  } while (a + b < 11 || a + b > 18);
+  return {
+    a,
+    b,
+    op: "+",
+    answer: a + b
+  };
+};
+const gM20Z = () => {
+  let a, b, r;
+  do {
+    r = rand(1, 9);
+    b = rand(2, 9);
+    a = r + b;
+  } while (a < 11 || a > 20);
+  return {
+    a,
+    b,
+    op: "-",
+    answer: a - b
+  };
+};
+const STAGES = [{
+  id: "p10",
+  n: 1,
+  name: "Plus bis 10",
+  icon: "➕",
+  max: 10,
+  gen: gP10
+}, {
+  id: "m10",
+  n: 2,
+  name: "Minus bis 10",
+  icon: "➖",
+  max: 10,
+  gen: gM10
+}, {
+  id: "pm10",
+  n: 3,
+  name: "Plus & Minus bis 10",
+  icon: "🔀",
+  max: 10,
+  gen: () => pickFn([gP10, gM10])()
+}, {
+  id: "p20",
+  n: 4,
+  name: "Plus bis 20 (ohne Übergang)",
+  icon: "➕",
+  max: 20,
+  gen: gP20
+}, {
+  id: "m20",
+  n: 5,
+  name: "Minus bis 20 (ohne Übergang)",
+  icon: "➖",
+  max: 20,
+  gen: gM20
+}, {
+  id: "p20z",
+  n: 6,
+  name: "Plus über den Zehner",
+  icon: "➕",
+  max: 20,
+  gen: gP20Z
+}, {
+  id: "m20z",
+  n: 7,
+  name: "Minus über den Zehner",
+  icon: "➖",
+  max: 20,
+  gen: gM20Z
+}, {
+  id: "pm20z",
+  n: 8,
+  name: "Plus & Minus mit Übergang",
+  icon: "🔀",
+  max: 20,
+  gen: () => pickFn([gP20Z, gM20Z])()
+}, {
+  id: "pm20",
+  n: 9,
+  name: "Alles gemischt bis 20",
+  icon: "🎲",
+  max: 20,
+  gen: () => pickFn([gP10, gM10, gP20, gM20])()
+}];
+const stageById = id => STAGES.find(s => s.id === id);
+const makeProblem = stage => {
+  const base = stage.gen();
+  return {
+    ...base,
+    max: stage.max,
+    options: makeOptions(base.answer, stage.max)
+  };
+};
 function getHint(p) {
   const {
     a,
@@ -126,17 +257,64 @@ function getHint(p) {
     answer
   } = p;
   if (op === "+") {
-    const toTen = 10 - a;
-    if (a + b <= 10) return `Starte bei ${a} und zähle ${b} weiter: …${answer}.`;
-    const rest = b - toTen;
-    return `Erst bis zur Zehn: ${a} + ${toTen} = 10. Dann 10 + ${rest} = ${answer}.`;
+    if (a < 10 && a + b > 10) {
+      const toTen = 10 - a,
+        rest = b - toTen;
+      return `Erst bis zur 10: ${a} + ${toTen} = 10. Dann 10 + ${rest} = ${answer}.`;
+    }
+    return `Zähle von ${a} aus ${b} weiter: … ${answer}.`;
   } else {
-    if (a <= 10) return `Nimm ${b} von ${a} weg: …${answer}.`;
-    const down = a - 10;
-    if (b <= down) return `${a} − ${b} = ${answer}. Die Zehn bleibt heil!`;
-    const rest = b - down;
-    return `Erst bis zur Zehn: ${a} − ${down} = 10. Dann 10 − ${rest} = ${answer}.`;
+    if (a > 10 && a % 10 < b) {
+      const down = a - 10,
+        rest = b - down;
+      return `Erst bis zur 10: ${a} − ${down} = 10. Dann 10 − ${rest} = ${answer}.`;
+    }
+    return `Nimm ${b} von ${a} weg: … ${answer}.`;
   }
+}
+const MIN_TOTAL = 25,
+  WINDOW = 20,
+  NEED = 16,
+  GOLD_STREAK = 10;
+const blankStat = () => ({
+  att: 0,
+  ok: 0,
+  recent: [],
+  streakBest: 0,
+  mastered: false,
+  gold: false
+});
+const stat = (save, id) => save.stages[id] || blankStat();
+function updateStageStat(st, firstTry, newStreak) {
+  const att = st.att + 1;
+  const ok = st.ok + (firstTry ? 1 : 0);
+  const recent = [...st.recent, firstTry].slice(-WINDOW);
+  const streakBest = Math.max(st.streakBest, newStreak);
+  const mastered = st.mastered || att >= MIN_TOTAL && countTrue(recent) >= NEED;
+  const gold = st.gold || streakBest >= GOLD_STREAK;
+  return {
+    att,
+    ok,
+    recent,
+    streakBest,
+    mastered,
+    gold
+  };
+}
+function computeUnlocked(stages) {
+  const u = [];
+  STAGES.forEach((s, i) => {
+    if (stages[s.id] && stages[s.id].mastered) u.push(i);
+  });
+  const m = id => stages[id] && stages[id].mastered;
+  if (m("p10") && m("m10") && m("pm10")) u.push(9);
+  if (m("p20") && m("m20")) u.push(10);
+  if (STAGES.every(s => stages[s.id] && stages[s.id].mastered)) u.push(11);
+  return u;
+}
+function recommendedStage(stages) {
+  const first = STAGES.find(s => !(stages[s.id] && stages[s.id].mastered));
+  return first ? first.id : "pm20";
 }
 const CREATURES = [{
   name: "Blubbi",
@@ -193,51 +371,47 @@ const CREATURES = [{
   horn: false,
   eyes: 3
 }, {
+  name: "Sternchen",
+  c1: "#FFD93D",
+  c2: "#F2A900",
+  horn: true,
+  eyes: 2
+}, {
   name: "Mümmel",
   c1: "#56D9C0",
   c2: "#26B49A",
   horn: true,
   eyes: 2
 }, {
-  name: "Zacki",
-  c1: "#FF9F1C",
-  c2: "#E07B00",
-  horn: true,
-  eyes: 3
-}, {
   name: "Schimmer",
   c1: "#9B8CFF",
   c2: "#6C5CE7",
   horn: false,
-  eyes: 2
+  eyes: 3
 }];
-const STARS_PER_CREATURE = 5;
 function Creature({
   c,
   size = 96,
   locked = false,
   bob = false
 }) {
-  if (locked) {
-    return React.createElement("svg", {
-      width: size,
-      height: size,
-      viewBox: "0 0 100 100",
-      "aria-hidden": true
-    }, React.createElement("circle", {
-      cx: "50",
-      cy: "55",
-      r: "34",
-      fill: "#E7E2F2"
-    }), React.createElement("text", {
-      x: "50",
-      y: "68",
-      textAnchor: "middle",
-      fontSize: "34",
-      fill: "#C3B9DC"
-    }, "?"));
-  }
-  const eyeY = 50;
+  if (locked) return React.createElement("svg", {
+    width: size,
+    height: size,
+    viewBox: "0 0 100 100",
+    "aria-hidden": true
+  }, React.createElement("circle", {
+    cx: "50",
+    cy: "55",
+    r: "34",
+    fill: "#E7E2F2"
+  }), React.createElement("text", {
+    x: "50",
+    y: "68",
+    textAnchor: "middle",
+    fontSize: "34",
+    fill: "#C3B9DC"
+  }, "?"));
   return React.createElement("svg", {
     className: bob ? "zh-bob" : "",
     width: size,
@@ -264,52 +438,52 @@ function Creature({
     opacity: "0.35"
   }), c.eyes === 3 ? React.createElement(React.Fragment, null, React.createElement("circle", {
     cx: "38",
-    cy: eyeY,
+    cy: "50",
     r: "8",
     fill: "#fff"
   }), React.createElement("circle", {
     cx: "38",
-    cy: eyeY + 1,
+    cy: "51",
     r: "4",
     fill: "#2A2342"
   }), React.createElement("circle", {
     cx: "50",
-    cy: eyeY - 4,
+    cy: "46",
     r: "8",
     fill: "#fff"
   }), React.createElement("circle", {
     cx: "50",
-    cy: eyeY - 3,
+    cy: "47",
     r: "4",
     fill: "#2A2342"
   }), React.createElement("circle", {
     cx: "62",
-    cy: eyeY,
+    cy: "50",
     r: "8",
     fill: "#fff"
   }), React.createElement("circle", {
     cx: "62",
-    cy: eyeY + 1,
+    cy: "51",
     r: "4",
     fill: "#2A2342"
   })) : React.createElement(React.Fragment, null, React.createElement("circle", {
     cx: "40",
-    cy: eyeY,
+    cy: "50",
     r: "9",
     fill: "#fff"
   }), React.createElement("circle", {
     cx: "41",
-    cy: eyeY + 1,
+    cy: "51",
     r: "4.5",
     fill: "#2A2342"
   }), React.createElement("circle", {
     cx: "60",
-    cy: eyeY,
+    cy: "50",
     r: "9",
     fill: "#fff"
   }), React.createElement("circle", {
     cx: "61",
-    cy: eyeY + 1,
+    cy: "51",
     r: "4.5",
     fill: "#2A2342"
   })), React.createElement("path", {
@@ -318,18 +492,6 @@ function Creature({
     strokeWidth: "3",
     fill: "none",
     strokeLinecap: "round"
-  }), React.createElement("circle", {
-    cx: "30",
-    cy: "64",
-    r: "5",
-    fill: "#fff",
-    opacity: "0.5"
-  }), React.createElement("circle", {
-    cx: "70",
-    cy: "64",
-    r: "5",
-    fill: "#fff",
-    opacity: "0.5"
   }));
 }
 function Mascot({
@@ -341,24 +503,11 @@ function Mascot({
     width: size,
     height: size,
     viewBox: "0 0 120 120"
-  }, React.createElement("ellipse", {
-    cx: "60",
-    cy: "108",
-    rx: "30",
-    ry: "6",
-    fill: "#000",
-    opacity: "0.08"
-  }), React.createElement("circle", {
+  }, React.createElement("circle", {
     cx: "60",
     cy: "62",
     r: "42",
     fill: "#FFC93C"
-  }), React.createElement("circle", {
-    cx: "60",
-    cy: "62",
-    r: "42",
-    fill: "#F2A900",
-    opacity: "0.18"
   }), React.createElement("circle", {
     cx: "60",
     cy: "74",
@@ -370,7 +519,7 @@ function Mascot({
     r: "11",
     fill: "#fff"
   }), React.createElement("circle", {
-    cx: mood === "think" ? 47 : 49,
+    cx: "49",
     cy: "56",
     r: "5.5",
     fill: "#2A2342"
@@ -380,7 +529,7 @@ function Mascot({
     r: "11",
     fill: "#fff"
   }), React.createElement("circle", {
-    cx: mood === "think" ? 73 : 75,
+    cx: "75",
     cy: "56",
     r: "5.5",
     fill: "#2A2342"
@@ -407,7 +556,7 @@ function Mascot({
     strokeLinecap: "round"
   }), React.createElement("path", {
     d: "M60 8 l3.4 7 7.6 1-5.5 5.4 1.3 7.6L60 32l-6.8 4 1.3-7.6L49 23l7.6-1z",
-    fill: "#FFFFFF",
+    fill: "#fff",
     stroke: "#F2A900",
     strokeWidth: "1.5"
   }));
@@ -423,13 +572,13 @@ function TwentyFrame({
   } = p;
   const cells = [];
   for (let i = 0; i < 20; i++) {
-    let state = "empty";
+    let s = "empty";
     if (op === "+") {
-      if (i < a) state = "a";else if (i < a + b) state = "b";
+      if (i < a) s = "a";else if (i < a + b) s = "b";
     } else {
-      if (i < a) state = i >= a - b ? "removed" : "a";
+      if (i < a) s = i >= a - b ? "removed" : "a";
     }
-    cells.push(state);
+    cells.push(s);
   }
   const rows = [cells.slice(0, 10), cells.slice(10, 20)];
   return React.createElement("div", {
@@ -455,7 +604,7 @@ function Confetti({
   show
 }) {
   if (!show) return null;
-  const colors = ["#FFC93C", "#FF6B6B", "#4ECDC4", "#7C5CDC", "#5AB2FF", "#A0E548"];
+  const cols = ["#FFC93C", "#FF6B6B", "#4ECDC4", "#7C5CDC", "#5AB2FF", "#A0E548"];
   return React.createElement("div", {
     className: "zh-confetti"
   }, Array.from({
@@ -464,204 +613,263 @@ function Confetti({
     key: i,
     style: {
       left: `${rand(2, 96)}%`,
-      background: colors[i % colors.length],
+      background: cols[i % cols.length],
       animationDelay: `${rand(0, 300)}ms`,
       transform: `rotate(${rand(0, 360)}deg)`
     }
   })));
 }
-const HERO_MODE = {
-  id: "mixed",
-  label: "Bunt gemischt bis 20",
-  emoji: "🎲",
-  sub: "Plus & Minus – dein Haupt-Training",
-  c: "#FFC93C"
-};
-const TARGET_MODES = [{
-  id: "plusZ",
-  label: "Plus über den Zehner",
-  emoji: "➕",
-  sub: "Zehnerübergang",
-  c: "#FF8FAB"
-}, {
-  id: "minusZ",
-  label: "Minus über den Zehner",
-  emoji: "➖",
-  sub: "Zehnerübergang",
-  c: "#5AB2FF"
-}, {
-  id: "plus10",
-  label: "Plus bis 10",
-  emoji: "🌱",
-  sub: "zum Aufwärmen",
-  c: "#A0E548"
-}, {
-  id: "minus10",
-  label: "Minus bis 10",
-  emoji: "🍃",
-  sub: "zum Aufwärmen",
-  c: "#4ECDC4"
-}];
-function FriendProgress({
-  stars,
-  order
-}) {
-  const all = Math.min(Math.floor(stars / STARS_PER_CREATURE), CREATURES.length);
-  const inLevel = all >= CREATURES.length ? STARS_PER_CREATURE : stars % STARS_PER_CREATURE;
-  const pct = inLevel / STARS_PER_CREATURE * 100;
-  const done = all >= CREATURES.length;
-  const next = CREATURES[order[Math.min(all, CREATURES.length - 1)]];
-  return React.createElement("div", {
-    className: "zh-progress"
-  }, React.createElement("div", {
-    className: "zh-progmini"
-  }, React.createElement(Creature, {
-    c: next,
-    size: 42,
-    locked: !done
-  })), React.createElement("div", {
-    className: "zh-progbody"
-  }, React.createElement("div", {
-    className: "zh-progtop"
-  }, React.createElement("span", null, done ? "Alle Freunde gesammelt!" : "Nächster Freund"), React.createElement("span", null, done ? "🎉" : `${STARS_PER_CREATURE - inLevel} ⭐`)), React.createElement("div", {
-    className: "zh-bar"
-  }, React.createElement("div", {
-    className: "zh-barfill",
-    style: {
-      width: `${pct}%`
-    }
-  }))));
-}
 function App() {
+  const [save, setSaveState] = useState(() => store.get(defaultSave()));
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  }, [save]);
+  const setSave = useCallback(upd => {
+    setSaveState(prev => {
+      const next = typeof upd === "function" ? upd(prev) : upd;
+      store.set(next);
+      return next;
+    });
+  }, []);
   const [screen, setScreen] = useState("home");
-  const [mode, setMode] = useState(null);
   const [problem, setProblem] = useState(null);
   const [status, setStatus] = useState("idle");
-  const [wrongPicks, setWrongPicks] = useState([]);
+  const [wrong, setWrong] = useState([]);
   const [showHelp, setShowHelp] = useState(false);
-  const [stars, setStars] = useState(0);
-  const [streak, setStreak] = useState(0);
-  const [session, setSession] = useState(0);
   const [confetti, setConfetti] = useState(false);
-  const [unlocked, setUnlocked] = useState(null);
-  const [order] = useState(() => shuffle(CREATURES.map((_, i) => i)));
-  const soundOn = useRef(true);
-  const [soundUi, setSoundUi] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
+  const [doneCount, setDoneCount] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [streakMsg, setStreakMsg] = useState(null);
+  const [report, setReport] = useState(null);
+  const [resetAsk, setResetAsk] = useState(false);
+  const soundOn = useRef(save.settings.sound);
+  const sessionRef = useRef({
+    stageId: "p10",
+    results: []
+  });
+  const stageIdRef = useRef("p10");
+  const unlockedAtStart = useRef([]);
+  const timeUpRef = useRef(false);
   const play = useSound(soundOn);
-  const newProblem = useCallback(m => {
-    setProblem(generateProblem(m));
+  useEffect(() => {
+    soundOn.current = save.settings.sound;
+  }, [save.settings.sound]);
+  const minutes = save.settings.minutes;
+  const timeUp = minutes > 0 && elapsed >= minutes * 60;
+  useEffect(() => {
+    timeUpRef.current = timeUp;
+  }, [timeUp]);
+  useEffect(() => {
+    if (screen !== "play" || minutes === 0) return;
+    const id = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [screen, minutes]);
+  const newProblem = useCallback(() => {
+    setProblem(makeProblem(stageById(stageIdRef.current)));
     setStatus("idle");
-    setWrongPicks([]);
+    setWrong([]);
     setShowHelp(false);
   }, []);
-  const startMode = m => {
-    setMode(m);
-    setSession(0);
+  const startSession = stageId => {
+    stageIdRef.current = stageId;
+    sessionRef.current = {
+      stageId,
+      results: []
+    };
+    unlockedAtStart.current = computeUnlocked(saveRef.current.stages);
+    setElapsed(0);
+    setDoneCount(0);
     setStreak(0);
-    newProblem(m);
+    newProblem();
     setScreen("play");
   };
+  const speak = text => {
+    if (!save.settings.voice) return;
+    try {
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "de-DE";
+      u.rate = 0.95;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  };
+  const finishSession = useCallback(() => {
+    const sess = sessionRef.current;
+    const done = sess.results.length;
+    const correct = countTrue(sess.results);
+    const cur = saveRef.current;
+    const unlockedNow = computeUnlocked(cur.stages);
+    const newFriends = unlockedNow.filter(i => !unlockedAtStart.current.includes(i));
+    const prevDone = cur.last ? cur.last.done : null;
+    setSave(prev => ({
+      ...prev,
+      last: {
+        done,
+        correct
+      },
+      best: Math.max(prev.best, done)
+    }));
+    setReport({
+      done,
+      correct,
+      prevDone,
+      newFriends,
+      stageId: sess.stageId
+    });
+    setScreen("report");
+    if (newFriends.length) setTimeout(() => play("unlock"), 500);
+    const fr = newFriends.length ? ` Du hast einen neuen Freund: ${CREATURES[newFriends[0]].name}.` : "";
+    speak(`Du hast ${done} Aufgaben geschafft, ${correct} gleich richtig.${fr}`);
+  }, [setSave]);
+  const advance = useCallback(() => {
+    if (timeUpRef.current) finishSession();else newProblem();
+  }, [finishSession, newProblem]);
   const handlePick = opt => {
     if (status === "right") return;
     if (opt === problem.answer) {
+      const firstTry = wrong.length === 0;
+      const newStreak = firstTry ? streak + 1 : 0;
+      setStreak(newStreak);
       play("right");
       setStatus("right");
-      setSession(s => s + 1);
-      setStreak(s => s + 1);
       setConfetti(true);
-      setStars(prev => {
-        const next = prev + 1;
-        const before = Math.min(Math.floor(prev / STARS_PER_CREATURE), CREATURES.length);
-        const after = Math.min(Math.floor(next / STARS_PER_CREATURE), CREATURES.length);
-        if (after > before) {
-          setTimeout(() => {
-            play("unlock");
-            setUnlocked(CREATURES[order[before]]);
-          }, 700);
+      sessionRef.current.results.push(firstTry);
+      setDoneCount(d => d + 1);
+      const sid = stageIdRef.current;
+      const prevSt = saveRef.current.stages[sid] || blankStat();
+      const newSt = updateStageStat(prevSt, firstTry, newStreak);
+      let bonus = 0;
+      if (firstTry && newStreak > 0 && newStreak % 5 === 0) {
+        bonus = 5;
+        setStreakMsg(`🔥 ${newStreak} in Folge! +5 ⭐`);
+        setTimeout(() => setStreakMsg(null), 1800);
+      }
+      setSave(prev => ({
+        ...prev,
+        stars: prev.stars + 1 + bonus,
+        stages: {
+          ...prev.stages,
+          [sid]: newSt
         }
-        return next;
-      });
-      setTimeout(() => setConfetti(false), 1200);
-      setTimeout(() => newProblem(mode), 1500);
+      }));
+      setTimeout(() => setConfetti(false), 1100);
+      setTimeout(advance, 1350);
     } else {
       play("retry");
-      setStreak(0);
       setShowHelp(true);
-      setWrongPicks(w => w.includes(opt) ? w : [...w, opt]);
+      setStreak(0);
+      setWrong(w => w.includes(opt) ? w : [...w, opt]);
     }
   };
-  const unlockedCount = Math.min(Math.floor(stars / STARS_PER_CREATURE), CREATURES.length);
+  const toggle = field => setSave(prev => ({
+    ...prev,
+    settings: {
+      ...prev.settings,
+      [field]: !prev.settings[field]
+    }
+  }));
+  const setMinutes = m => setSave(prev => ({
+    ...prev,
+    settings: {
+      ...prev.settings,
+      minutes: m
+    }
+  }));
+  const doReset = () => {
+    store.clear();
+    const d = defaultSave();
+    setSaveState(d);
+    saveRef.current = d;
+    setResetAsk(false);
+    setScreen("home");
+  };
+  const unlocked = computeUnlocked(save.stages);
+  const recId = recommendedStage(save.stages);
+  const recStage = stageById(recId);
+  const Header = ({
+    showGear = true
+  }) => React.createElement("header", {
+    className: "zh-header"
+  }, React.createElement("div", {
+    className: "zh-logo"
+  }, "\u2B50 ", save.stars), React.createElement("div", {
+    className: "zh-hright"
+  }, React.createElement("button", {
+    className: "zh-icbtn",
+    onClick: () => toggle("sound"),
+    "aria-label": "Ton"
+  }, save.settings.sound ? "🔊" : "🔇"), showGear && React.createElement("button", {
+    className: "zh-icbtn",
+    onClick: () => {
+      play("tap");
+      setScreen("adult");
+    },
+    "aria-label": "Einstellungen"
+  }, "\u2699\uFE0F")));
   if (screen === "home") {
-    return React.createElement(Shell, {
-      stars: stars,
-      soundUi: soundUi,
-      onSound: () => {
-        soundOn.current = !soundOn.current;
-        setSoundUi(soundOn.current);
-      }
+    return React.createElement("div", {
+      className: "zh-root"
+    }, React.createElement(Header, null), React.createElement("main", {
+      className: "zh-main"
     }, React.createElement("div", {
       className: "zh-hero"
     }, React.createElement(Mascot, {
-      size: 130
+      size: 120
     }), React.createElement("h1", {
       className: "zh-title"
     }, "Numi"), React.createElement("p", {
       className: "zh-tag"
-    }, "\xDCbe Plus und Minus bis 20 \u2013 in deinem Tempo, ganz ohne Stoppuhr.")), React.createElement(FriendProgress, {
-      stars: stars,
-      order: order
-    }), React.createElement("button", {
-      className: "zh-hcard",
-      style: {
-        "--c": HERO_MODE.c
-      },
+    }, "\xDCbe Plus und Minus bis 20 \u2013 in deinem Tempo.")), React.createElement("button", {
+      className: "zh-rec",
       onClick: () => {
         play("tap");
-        startMode(HERO_MODE.id);
+        startSession(recId);
       }
     }, React.createElement("span", {
-      className: "zh-hemoji"
-    }, HERO_MODE.emoji), React.createElement("span", {
-      className: "zh-modetext"
-    }, React.createElement("strong", null, HERO_MODE.label), React.createElement("small", null, HERO_MODE.sub)), React.createElement("span", {
-      className: "zh-go"
+      className: "zh-recicon"
+    }, recStage.icon), React.createElement("span", {
+      className: "zh-rectext"
+    }, React.createElement("small", null, "Weiter geht's"), React.createElement("strong", null, recStage.name)), React.createElement("span", {
+      className: "zh-recgo"
     }, "Los!")), React.createElement("p", {
       className: "zh-section"
-    }, "Gezielt \xFCben"), React.createElement("div", {
-      className: "zh-modes"
-    }, TARGET_MODES.map(m => React.createElement("button", {
-      key: m.id,
-      className: "zh-modecard",
-      style: {
-        "--c": m.c
-      },
-      onClick: () => {
-        play("tap");
-        startMode(m.id);
-      }
-    }, React.createElement("span", {
-      className: "zh-modeemoji"
-    }, m.emoji), React.createElement("span", {
-      className: "zh-modetext"
-    }, React.createElement("strong", null, m.label), React.createElement("small", null, m.sub)), React.createElement("span", {
-      className: "zh-go"
-    }, "Los!")))), React.createElement("button", {
+    }, "Alle Stufen"), React.createElement("div", {
+      className: "zh-stages"
+    }, STAGES.map(s => {
+      const st = stat(save, s.id);
+      const badge = st.gold ? "⭐" : st.mastered ? "✓" : "";
+      return React.createElement("button", {
+        key: s.id,
+        className: `zh-stile${st.gold ? " gold" : st.mastered ? " done" : ""}`,
+        onClick: () => {
+          play("tap");
+          startSession(s.id);
+        }
+      }, React.createElement("span", {
+        className: "zh-snum"
+      }, s.n), React.createElement("span", {
+        className: "zh-sname"
+      }, s.name), badge && React.createElement("span", {
+        className: "zh-sbadge"
+      }, badge));
+    })), React.createElement("button", {
       className: "zh-collectbtn",
       onClick: () => {
         play("tap");
         setScreen("collection");
       }
-    }, "\uD83C\uDFC6 Meine Freunde (", unlockedCount, "/", CREATURES.length, ")"), React.createElement(Styles, null));
+    }, "\uD83C\uDFC6 Meine Freunde (", unlocked.length, "/", CREATURES.length, ")"), React.createElement(Styles, null)));
   }
   if (screen === "collection") {
-    const toNext = STARS_PER_CREATURE - stars % STARS_PER_CREATURE;
-    return React.createElement(Shell, {
-      stars: stars,
-      soundUi: soundUi,
-      onSound: () => {
-        soundOn.current = !soundOn.current;
-        setSoundUi(soundOn.current);
-      }
+    const labels = [...STAGES.map(s => `Stufe ${s.n}`), "Alles bis 10", "Ohne Übergang", "Heft komplett"];
+    return React.createElement("div", {
+      className: "zh-root"
+    }, React.createElement(Header, {
+      showGear: false
+    }), React.createElement("main", {
+      className: "zh-main"
     }, React.createElement("button", {
       className: "zh-back",
       onClick: () => {
@@ -670,66 +878,208 @@ function App() {
       }
     }, "\u2039 Zur\xFCck"), React.createElement("h2", {
       className: "zh-h2"
-    }, "Deine Zahlenmonster"), React.createElement("p", {
+    }, "Deine Freunde"), React.createElement("p", {
       className: "zh-tag"
-    }, unlockedCount < CREATURES.length ? `Noch ${toNext} ⭐ bis zum nächsten Freund!` : "Wow! Du hast alle Freunde gesammelt! 🎉"), React.createElement("div", {
+    }, "Jeder Freund kommt, wenn du eine Stufe sicher kannst."), React.createElement("div", {
       className: "zh-grid"
     }, CREATURES.map((c, i) => {
-      const open = order.indexOf(i) < unlockedCount;
+      const open = unlocked.includes(i);
       return React.createElement("div", {
         key: c.name,
         className: `zh-cardc${open ? " open" : ""}`
       }, React.createElement(Creature, {
         c: c,
         locked: !open,
-        size: 84,
+        size: 78,
         bob: open
-      }), React.createElement("span", null, open ? c.name : "???"));
-    })), React.createElement(Styles, null));
+      }), React.createElement("span", null, open ? c.name : "???"), React.createElement("small", null, labels[i]));
+    })), React.createElement(Styles, null)));
   }
-  if (screen === "done") {
-    return React.createElement(Shell, {
-      stars: stars,
-      soundUi: soundUi,
-      onSound: () => {
-        soundOn.current = !soundOn.current;
-        setSoundUi(soundOn.current);
-      }
+  if (screen === "report") {
+    const r = report;
+    const maxv = Math.max(r.done, r.prevDone || 0, 1);
+    const more = r.prevDone != null && r.done > r.prevDone;
+    return React.createElement("div", {
+      className: "zh-root"
+    }, React.createElement(Header, {
+      showGear: false
+    }), React.createElement("main", {
+      className: "zh-main"
+    }, React.createElement(Confetti, {
+      show: true
+    }), React.createElement("div", {
+      className: "zh-card zh-report"
     }, React.createElement("div", {
-      className: "zh-done"
+      className: "zh-rhead"
     }, React.createElement(Mascot, {
-      size: 120,
+      size: 56,
       mood: "right"
     }), React.createElement("h2", {
       className: "zh-h2"
-    }, "Stark gemacht!"), React.createElement("p", {
-      className: "zh-bigcount"
-    }, session), React.createElement("p", {
-      className: "zh-tag"
-    }, "Aufgaben geschafft \uD83C\uDF89"), React.createElement("div", {
-      className: "zh-donebtns"
+    }, "Dein Bericht")), React.createElement("div", {
+      className: "zh-bignum"
+    }, r.done, React.createElement("small", null, "geschafft")), React.createElement("div", {
+      className: "zh-repdots"
+    }, Array.from({
+      length: Math.min(r.done, 40)
+    }).map((_, i) => React.createElement("span", {
+      key: i,
+      className: `zh-rdot ${i < r.correct ? "g" : "e"}`
+    }))), React.createElement("div", {
+      className: "zh-rightlbl"
+    }, r.correct, " gleich richtig \u2713"), r.prevDone != null && React.createElement("div", {
+      className: "zh-compare"
+    }, React.createElement("div", {
+      className: "zh-bw"
+    }, React.createElement("span", {
+      className: "zh-bn",
+      style: {
+        color: "#9387b3"
+      }
+    }, r.prevDone), React.createElement("span", {
+      className: "zh-bar old",
+      style: {
+        height: `${20 + r.prevDone / maxv * 80}px`
+      }
+    }), React.createElement("small", null, "letztes\xA0Mal")), more && React.createElement("div", {
+      className: "zh-arrow"
+    }, "\u25B2"), React.createElement("div", {
+      className: "zh-bw"
+    }, React.createElement("span", {
+      className: "zh-bn",
+      style: {
+        color: "#FF6B6B"
+      }
+    }, r.done), React.createElement("span", {
+      className: "zh-bar new",
+      style: {
+        height: `${20 + r.done / maxv * 80}px`
+      }
+    }), React.createElement("small", null, "heute"))), r.newFriends.length > 0 && React.createElement("div", {
+      className: "zh-reveal"
+    }, React.createElement("div", {
+      className: "zh-sunburst",
+      "aria-hidden": "true"
+    }), React.createElement("div", {
+      className: "zh-revtitle"
+    }, "\uD83C\uDF89 Neuer Freund!"), React.createElement("div", {
+      className: "zh-friendrow"
+    }, r.newFriends.map(i => React.createElement("div", {
+      key: i,
+      className: "zh-friendone zh-popin"
+    }, React.createElement(Creature, {
+      c: CREATURES[i],
+      size: r.newFriends.length > 1 ? 66 : 96,
+      bob: true
+    }), React.createElement("div", {
+      className: "zh-fpill"
+    }, CREATURES[i].name)))), React.createElement("span", {
+      className: "zh-spark s1"
+    }, "\u2728"), React.createElement("span", {
+      className: "zh-spark s2"
+    }, "\u2B50"), React.createElement("span", {
+      className: "zh-spark s3"
+    }, "\u2728"), React.createElement("span", {
+      className: "zh-spark s4"
+    }, "\u2B50")), save.settings.voice && React.createElement("button", {
+      className: "zh-help",
+      onClick: () => speak(`Du hast ${r.done} Aufgaben geschafft, ${r.correct} gleich richtig.`)
+    }, "\uD83D\uDD08 Nochmal vorlesen"), React.createElement("div", {
+      className: "zh-rbtns"
     }, React.createElement("button", {
       className: "zh-primary",
       onClick: () => {
         play("tap");
-        startMode(mode);
+        startSession(r.stageId);
       }
-    }, "Nochmal!"), React.createElement("button", {
+    }, "Nochmal \u25B6"), React.createElement("button", {
       className: "zh-ghost",
       onClick: () => {
         play("tap");
         setScreen("home");
       }
-    }, "Zur Auswahl"))), React.createElement(Styles, null));
+    }, "\uD83C\uDFE0"))), React.createElement(Styles, null)));
+  }
+  if (screen === "adult") {
+    return React.createElement("div", {
+      className: "zh-root"
+    }, React.createElement(Header, {
+      showGear: false
+    }), React.createElement("main", {
+      className: "zh-main"
+    }, React.createElement("button", {
+      className: "zh-back",
+      onClick: () => {
+        play("tap");
+        setScreen("home");
+      }
+    }, "\u2039 Zur\xFCck"), React.createElement("h2", {
+      className: "zh-h2"
+    }, "F\xFCr Erwachsene"), React.createElement("div", {
+      className: "zh-card zh-block"
+    }, React.createElement("p", {
+      className: "zh-blabel"
+    }, "Sitzungsl\xE4nge"), React.createElement("div", {
+      className: "zh-seg"
+    }, [3, 5, 10, 0].map(m => React.createElement("button", {
+      key: m,
+      className: `zh-segbtn${minutes === m ? " on" : ""}`,
+      onClick: () => setMinutes(m)
+    }, m === 0 ? "Aus" : `${m} Min`))), React.createElement("div", {
+      className: "zh-toggles"
+    }, React.createElement("button", {
+      className: `zh-tg${save.settings.sound ? " on" : ""}`,
+      onClick: () => toggle("sound")
+    }, save.settings.sound ? "🔊" : "🔇", " Ton"), React.createElement("button", {
+      className: `zh-tg${save.settings.voice ? " on" : ""}`,
+      onClick: () => toggle("voice")
+    }, "\uD83D\uDD08 Vorlesen"))), React.createElement("div", {
+      className: "zh-card zh-block"
+    }, React.createElement("p", {
+      className: "zh-blabel"
+    }, "Lernstand"), STAGES.map(s => {
+      const st = stat(save, s.id);
+      return React.createElement("div", {
+        key: s.id,
+        className: "zh-statrow"
+      }, React.createElement("span", {
+        className: "zh-srn"
+      }, s.n), React.createElement("span", {
+        className: "zh-srname"
+      }, s.name), React.createElement("span", {
+        className: "zh-srstate"
+      }, st.gold ? "⭐ Gold" : st.mastered ? "✓ sicher" : st.att ? `${st.ok}/${st.att}` : "–"));
+    })), React.createElement("button", {
+      className: "zh-danger",
+      onClick: () => setResetAsk(true)
+    }, "Fortschritt zur\xFCcksetzen"), resetAsk && React.createElement("div", {
+      className: "zh-modal",
+      onClick: () => setResetAsk(false)
+    }, React.createElement("div", {
+      className: "zh-modalcard",
+      onClick: e => e.stopPropagation()
+    }, React.createElement("h3", {
+      className: "zh-h2"
+    }, "Wirklich alles zur\xFCcksetzen?"), React.createElement("p", {
+      className: "zh-tag"
+    }, "Sterne, Freunde und Lernstand werden gel\xF6scht."), React.createElement("div", {
+      className: "zh-rbtns"
+    }, React.createElement("button", {
+      className: "zh-danger",
+      onClick: doReset
+    }, "Ja, l\xF6schen"), React.createElement("button", {
+      className: "zh-ghost",
+      onClick: () => setResetAsk(false)
+    }, "Abbrechen")))), React.createElement(Styles, null)));
   }
   const p = problem;
-  return React.createElement(Shell, {
-    stars: stars,
-    soundUi: soundUi,
-    onSound: () => {
-      soundOn.current = !soundOn.current;
-      setSoundUi(soundOn.current);
-    }
+  const timePct = minutes > 0 ? Math.min(100, elapsed / (minutes * 60) * 100) : 0;
+  return React.createElement("div", {
+    className: "zh-root"
+  }, React.createElement(Header, {
+    showGear: false
+  }), React.createElement("main", {
+    className: "zh-main"
   }, React.createElement(Confetti, {
     show: confetti
   }), React.createElement("div", {
@@ -738,17 +1088,21 @@ function App() {
     className: "zh-back",
     onClick: () => {
       play("tap");
-      setScreen("done");
+      finishSession();
     }
   }, "\u2039 Fertig"), React.createElement("div", {
-    className: "zh-streak"
-  }, streak >= 2 ? `🔥 ${streak} in Folge!` : `Aufgabe ${session + 1}`)), React.createElement(FriendProgress, {
-    stars: stars,
-    order: order
-  }), React.createElement("div", {
-    className: `zh-problem${status === "right" ? " pop" : ""}`
+    className: "zh-doneN"
+  }, "Aufgabe ", doneCount + 1)), minutes > 0 && React.createElement("div", {
+    className: "zh-timebar"
+  }, React.createElement("div", {
+    className: "zh-timefill",
+    style: {
+      width: `${timePct}%`
+    }
+  })), React.createElement("div", {
+    className: `zh-card zh-problem${status === "right" ? " pop" : ""}`
   }, React.createElement(Mascot, {
-    size: 86,
+    size: 80,
     mood: status === "right" ? "right" : "happy"
   }), React.createElement("div", {
     className: "zh-equation"
@@ -767,7 +1121,7 @@ function App() {
       setShowHelp(s => !s);
     }
   }, showHelp ? "🙈 Hilfe aus" : "💡 Zeig mir's")), showHelp && React.createElement("div", {
-    className: "zh-helpbox"
+    className: "zh-card zh-helpbox"
   }, React.createElement(TwentyFrame, {
     p: p,
     reveal: true
@@ -776,216 +1130,154 @@ function App() {
   }, getHint(p))), React.createElement("div", {
     className: "zh-options"
   }, p.options.map(opt => {
-    const wrong = wrongPicks.includes(opt);
-    const right = status === "right" && opt === p.answer;
+    const w = wrong.includes(opt),
+      ri = status === "right" && opt === p.answer;
     return React.createElement("button", {
       key: opt,
-      disabled: wrong || status === "right",
-      className: `zh-opt${wrong ? " wrong" : ""}${right ? " right" : ""}`,
+      disabled: w || status === "right",
+      className: `zh-opt${w ? " wrong" : ""}${ri ? " right" : ""}`,
       onClick: () => handlePick(opt)
     }, opt);
-  })), status !== "right" && wrongPicks.length > 0 && React.createElement("p", {
+  })), status !== "right" && wrong.length > 0 && React.createElement("p", {
     className: "zh-encour"
-  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), unlocked && React.createElement("div", {
-    className: "zh-modal",
-    onClick: () => setUnlocked(null)
-  }, React.createElement("div", {
-    className: "zh-modalcard",
-    onClick: e => e.stopPropagation()
-  }, React.createElement(Confetti, {
-    show: true
-  }), React.createElement("p", {
-    className: "zh-tag"
-  }, "Du hast einen neuen Freund!"), React.createElement(Creature, {
-    c: unlocked,
-    size: 120,
-    bob: true
-  }), React.createElement("h3", {
-    className: "zh-h2"
-  }, unlocked.name), React.createElement("button", {
-    className: "zh-primary",
-    onClick: () => setUnlocked(null)
-  }, "Juhu! \uD83C\uDF89"))), React.createElement(Styles, null));
-}
-function Shell({
-  children,
-  stars,
-  soundUi,
-  onSound
-}) {
-  return React.createElement("div", {
-    className: "zh-root"
-  }, React.createElement("header", {
-    className: "zh-header"
-  }, React.createElement("div", {
-    className: "zh-logo"
-  }, "\u2B50 ", stars), React.createElement("button", {
-    className: "zh-soundbtn",
-    onClick: onSound,
-    "aria-label": "Ton an/aus"
-  }, soundUi ? "🔊" : "🔇")), React.createElement("main", {
-    className: "zh-main"
-  }, children));
+  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), React.createElement("div", {
+    className: `zh-streakbar${streak >= 1 ? "" : " idle"}`
+  }, streak >= 1 ? `🔥 ${streak} richtig in Folge` : "🔥 Sammle eine Serie"), streakMsg && React.createElement("div", {
+    className: "zh-streakmsg"
+  }, streakMsg), React.createElement(Styles, null)));
 }
 function Styles() {
   return React.createElement("style", null, `
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@600;700;800&display=swap');
-* { box-sizing: border-box; }
-.zh-root{
-  min-height: 100vh;
-  font-family: 'Nunito', system-ui, sans-serif;
-  color: #3A2E5C;
-  background: linear-gradient(180deg,#FFE9C7 0%,#FFD6E0 45%,#CDEFFF 100%);
-  display:flex; flex-direction:column;
-}
-.zh-header{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; }
-.zh-logo{ font-family:'Baloo 2'; font-weight:800; font-size:24px; color:#fff;
-  background:#FFC93C; padding:6px 18px; border-radius:999px; box-shadow:0 5px 0 #E0A800; }
-.zh-soundbtn{ border:none; background:#fff; width:46px; height:46px; border-radius:999px;
-  font-size:20px; box-shadow:0 4px 0 #d9d2ec; cursor:pointer; }
-.zh-soundbtn:active{ transform:translateY(3px); box-shadow:0 1px 0 #d9d2ec; }
-.zh-main{ width:100%; max-width:560px; margin:0 auto; padding:6px 18px 40px; flex:1; }
-
-/* HERO */
-.zh-hero{ text-align:center; padding:6px 0 10px; }
-.zh-title{ font-family:'Baloo 2'; font-weight:800; font-size:44px; margin:6px 0 4px;
-  color:#7C5CDC; letter-spacing:.5px; text-shadow:0 3px 0 rgba(255,255,255,.7); }
-.zh-tag{ font-weight:700; color:#6b5e8a; margin:4px 0 0; font-size:16px; }
-
-/* MODE CARDS */
-.zh-modes{ display:flex; flex-direction:column; gap:14px; margin-top:18px; }
-.zh-modecard{ display:flex; align-items:center; gap:14px; text-align:left; cursor:pointer;
-  border:none; background:#fff; border-radius:26px; padding:16px 18px;
-  box-shadow:0 7px 0 var(--c); transition:transform .08s; }
-.zh-modecard:active{ transform:translateY(4px); box-shadow:0 3px 0 var(--c); }
-.zh-modeemoji{ font-size:34px; width:56px; height:56px; display:flex; align-items:center;
-  justify-content:center; background:var(--c); border-radius:18px; }
-.zh-modetext{ display:flex; flex-direction:column; flex:1; }
-.zh-modetext strong{ font-family:'Baloo 2'; font-size:22px; color:#3A2E5C; }
-.zh-modetext small{ font-weight:700; color:#9387b3; font-size:13px; }
-.zh-go{ font-family:'Baloo 2'; font-weight:800; color:#fff; background:var(--c);
-  padding:8px 16px; border-radius:999px; font-size:16px; }
-.zh-collectbtn{ width:100%; margin-top:18px; border:none; cursor:pointer; font-family:'Baloo 2';
-  font-weight:700; font-size:18px; color:#7C5CDC; background:#fff; padding:14px; border-radius:22px;
-  box-shadow:0 6px 0 #E7E0F7; }
-.zh-collectbtn:active{ transform:translateY(3px); box-shadow:0 3px 0 #E7E0F7; }
-
-/* HERO MODE CARD */
-.zh-hcard{ width:100%; display:flex; align-items:center; gap:16px; text-align:left; cursor:pointer;
-  border:none; background:#fff; border-radius:30px; padding:20px; margin-top:16px;
-  box-shadow:0 9px 0 var(--c); transition:transform .08s; }
-.zh-hcard:active{ transform:translateY(5px); box-shadow:0 4px 0 var(--c); }
-.zh-hemoji{ font-size:40px; width:68px; height:68px; display:flex; align-items:center;
-  justify-content:center; background:var(--c); border-radius:22px; }
-.zh-hcard .zh-modetext strong{ font-size:25px; }
-.zh-section{ font-family:'Baloo 2'; font-weight:700; color:#9387b3; font-size:15px;
-  margin:22px 4px 0; text-transform:uppercase; letter-spacing:1px; }
-
-/* FRIEND PROGRESS */
-.zh-progress{ display:flex; align-items:center; gap:12px; background:#fff; border-radius:22px;
-  padding:12px 16px; margin-top:14px; box-shadow:0 6px 0 #ECE5FA; }
-.zh-progmini{ flex-shrink:0; }
-.zh-progbody{ flex:1; }
-.zh-progtop{ display:flex; justify-content:space-between; font-family:'Baloo 2'; font-weight:700;
-  font-size:14px; color:#7C5CDC; margin-bottom:6px; }
-.zh-bar{ height:14px; background:#EFEAF9; border-radius:999px; overflow:hidden; }
-.zh-barfill{ height:100%; background:linear-gradient(90deg,#FFC93C,#FF8FAB);
-  border-radius:999px; transition:width .5s ease; }
-
+*{box-sizing:border-box}
+.zh-root{min-height:100vh;font-family:'Nunito',system-ui,sans-serif;color:#3A2E5C;background:linear-gradient(180deg,#FFE9C7 0%,#FFD6E0 45%,#CDEFFF 100%);display:flex;flex-direction:column}
+.zh-header{display:flex;justify-content:space-between;align-items:center;padding:14px 18px}
+.zh-logo{font-family:'Baloo 2';font-weight:800;font-size:22px;color:#fff;background:#FFC93C;padding:6px 18px;border-radius:999px;box-shadow:0 5px 0 #E0A800}
+.zh-hright{display:flex;gap:10px}
+.zh-icbtn{border:none;background:#fff;width:46px;height:46px;border-radius:999px;font-size:20px;box-shadow:0 4px 0 #d9d2ec;cursor:pointer}
+.zh-icbtn:active{transform:translateY(3px);box-shadow:0 1px 0 #d9d2ec}
+.zh-main{width:100%;max-width:560px;margin:0 auto;padding:6px 18px 40px;flex:1}
+.zh-hero{text-align:center;padding:6px 0 10px}
+.zh-title{font-family:'Baloo 2';font-weight:800;font-size:44px;margin:6px 0 4px;color:#7C5CDC;text-shadow:0 3px 0 rgba(255,255,255,.7)}
+.zh-tag{font-weight:700;color:#6b5e8a;margin:4px 0 0;font-size:15px}
+.zh-card{background:#fff;border-radius:28px;box-shadow:0 9px 0 #ECE5FA}
+.zh-rec{width:100%;display:flex;align-items:center;gap:14px;text-align:left;cursor:pointer;border:none;background:#fff;border-radius:28px;padding:18px;margin-top:14px;box-shadow:0 8px 0 #FFC93C}
+.zh-rec:active{transform:translateY(4px);box-shadow:0 4px 0 #FFC93C}
+.zh-recicon{font-size:34px;width:60px;height:60px;display:flex;align-items:center;justify-content:center;background:#FFE08A;border-radius:20px}
+.zh-rectext{display:flex;flex-direction:column;flex:1}
+.zh-rectext small{font-weight:700;color:#9387b3;font-size:13px}
+.zh-rectext strong{font-family:'Baloo 2';font-size:21px;color:#3A2E5C;line-height:1.1}
+.zh-recgo{font-family:'Baloo 2';font-weight:800;color:#fff;background:#FF6B6B;padding:10px 18px;border-radius:999px;font-size:18px;box-shadow:0 4px 0 #E04848}
+.zh-section{font-family:'Baloo 2';font-weight:700;color:#9387b3;font-size:14px;margin:22px 4px 8px;text-transform:uppercase;letter-spacing:1px}
+.zh-stages{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.zh-stile{position:relative;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;border:none;background:#fff;border-radius:20px;padding:12px;box-shadow:0 6px 0 #ECE5FA}
+.zh-stile:active{transform:translateY(3px);box-shadow:0 3px 0 #ECE5FA}
+.zh-stile.done{box-shadow:0 6px 0 #BFE9D5}
+.zh-stile.gold{box-shadow:0 6px 0 #FFD86B}
+.zh-snum{font-family:'Baloo 2';font-weight:800;font-size:18px;color:#fff;background:#7C5CDC;width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.zh-stile.done .zh-snum{background:#3FBF8F}.zh-stile.gold .zh-snum{background:#F2A900}
+.zh-sname{font-family:'Baloo 2';font-weight:700;font-size:13px;line-height:1.15;color:#3A2E5C}
+.zh-sbadge{position:absolute;top:8px;right:10px;font-size:15px}
+.zh-collectbtn{width:100%;margin-top:18px;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:18px;color:#7C5CDC;background:#fff;padding:14px;border-radius:22px;box-shadow:0 6px 0 #E7E0F7}
+.zh-collectbtn:active{transform:translateY(3px);box-shadow:0 3px 0 #E7E0F7}
+.zh-back{border:none;background:transparent;font-family:'Baloo 2';font-weight:700;font-size:18px;color:#7C5CDC;cursor:pointer;padding:6px 4px}
+.zh-h2{font-family:'Baloo 2';font-weight:800;font-size:28px;color:#7C5CDC;text-align:center;margin:8px 0}
 /* PLAY */
-.zh-playtop{ display:flex; justify-content:space-between; align-items:center; margin-top:4px; }
-.zh-back{ border:none; background:transparent; font-family:'Baloo 2'; font-weight:700;
-  font-size:18px; color:#7C5CDC; cursor:pointer; padding:6px 4px; }
-.zh-streak{ font-family:'Baloo 2'; font-weight:700; color:#FF6B6B; background:#fff;
-  padding:6px 14px; border-radius:999px; box-shadow:0 4px 0 #ffd9d9; font-size:15px; }
-.zh-problem{ background:#fff; border-radius:30px; padding:18px; margin-top:14px;
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  box-shadow:0 9px 0 #ECE5FA; }
-.zh-problem.pop{ animation:pop .5s ease; }
-.zh-equation{ display:flex; align-items:center; gap:10px; font-family:'Baloo 2'; font-weight:800;
-  font-size:52px; color:#3A2E5C; }
-.zh-op{ color:#B8A9E0; }
-.zh-blank{ min-width:64px; text-align:center; color:#FF6B6B;
-  border-bottom:6px dotted #FFC93C; line-height:1; }
-.zh-helprow{ text-align:center; margin-top:14px; }
-.zh-help{ border:none; cursor:pointer; font-family:'Baloo 2'; font-weight:700; font-size:17px;
-  color:#3A2E5C; background:#FFE08A; padding:10px 22px; border-radius:999px; box-shadow:0 5px 0 #F2C84B; }
-.zh-help:active{ transform:translateY(3px); box-shadow:0 2px 0 #F2C84B; }
-
-/* TWENTY FRAME */
-.zh-helpbox{ background:#fff; border-radius:24px; padding:18px 16px; margin-top:14px;
-  box-shadow:0 7px 0 #ECE5FA; }
-.zh-frame{ width:100%; max-width:380px; margin:0 auto; display:flex; flex-direction:column; gap:clamp(4px,1.6vw,8px); }
-.zh-row{ display:flex; gap:clamp(3px,1.4vw,6px); }
-.zh-cell{ flex:1 1 0; aspect-ratio:1; border:2px solid #E3DBF5; border-radius:9px;
-  display:flex; align-items:center; justify-content:center; background:#FBFAFF; }
-.zh-cell.mid{ margin-left:clamp(7px,3.2vw,15px); }
-.zh-dot{ width:72%; aspect-ratio:1; border-radius:999px; display:flex; align-items:center;
-  justify-content:center; color:#fff; font-weight:800; font-size:clamp(9px,3vw,14px);
-  animation:dropin .3s ease both; }
-.zh-dot-a{ background:#FF6B6B; }
-.zh-dot-b{ background:#5AB2FF; }
-.zh-dot-removed{ background:#D7CEE8; }
-.zh-hinttext{ font-weight:800; text-align:center; color:#7C5CDC; font-size:17px; margin:14px 0 0; }
-
-/* OPTIONS */
-.zh-options{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:18px; }
-.zh-opt{ font-family:'Baloo 2'; font-weight:800; font-size:34px; color:#3A2E5C;
-  border:none; cursor:pointer; background:#fff; padding:22px 0; border-radius:24px;
-  box-shadow:0 7px 0 #D9CFF2; transition:transform .08s; }
-.zh-opt:active{ transform:translateY(4px); box-shadow:0 3px 0 #D9CFF2; }
-.zh-opt.wrong{ background:#FFE2E2; color:#E04848; box-shadow:0 7px 0 #F4B8B8;
-  animation:shake .4s; opacity:.85; }
-.zh-opt.right{ background:#C9F5E5; color:#1B9C6E; box-shadow:0 7px 0 #8FE3C4; }
-.zh-opt:disabled{ cursor:default; }
-.zh-encour{ text-align:center; font-weight:800; color:#7C5CDC; margin-top:16px; font-size:16px; }
-
+.zh-playtop{display:flex;justify-content:space-between;align-items:center;margin-top:4px}
+.zh-doneN{font-family:'Baloo 2';font-weight:700;color:#FF6B6B;background:#fff;padding:6px 14px;border-radius:999px;box-shadow:0 4px 0 #ffd9d9;font-size:15px}
+.zh-timebar{height:12px;background:#fff;border-radius:999px;overflow:hidden;margin-top:12px;box-shadow:0 3px 0 #ECE5FA}
+.zh-timefill{height:100%;background:linear-gradient(90deg,#FFC93C,#FF8FAB);transition:width 1s linear}
+.zh-problem{padding:18px;margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.zh-problem.pop{animation:pop .5s ease}
+.zh-equation{display:flex;align-items:center;gap:10px;font-family:'Baloo 2';font-weight:800;font-size:50px;color:#3A2E5C}
+.zh-op{color:#B8A9E0}.zh-blank{min-width:60px;text-align:center;color:#FF6B6B;border-bottom:6px dotted #FFC93C;line-height:1}
+.zh-helprow{text-align:center;margin-top:14px}
+.zh-help{border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:16px;color:#3A2E5C;background:#FFE08A;padding:10px 22px;border-radius:999px;box-shadow:0 5px 0 #F2C84B}
+.zh-help:active{transform:translateY(3px);box-shadow:0 2px 0 #F2C84B}
+.zh-helpbox{padding:18px 16px;margin-top:14px}
+.zh-frame{width:100%;max-width:380px;margin:0 auto;display:flex;flex-direction:column;gap:clamp(4px,1.6vw,8px)}
+.zh-row{display:flex;gap:clamp(3px,1.4vw,6px)}
+.zh-cell{flex:1 1 0;aspect-ratio:1;border:2px solid #E3DBF5;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#FBFAFF}
+.zh-cell.mid{margin-left:clamp(7px,3.2vw,15px)}
+.zh-dot{width:72%;aspect-ratio:1;border-radius:999px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:clamp(9px,3vw,14px);animation:dropin .3s ease both}
+.zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-removed{background:#D7CEE8}
+.zh-hinttext{font-weight:800;text-align:center;color:#7C5CDC;font-size:16px;margin:14px 0 0}
+.zh-options{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+.zh-opt{font-family:'Baloo 2';font-weight:800;font-size:34px;color:#3A2E5C;border:none;cursor:pointer;background:#fff;padding:22px 0;border-radius:24px;box-shadow:0 7px 0 #D9CFF2}
+.zh-opt:active{transform:translateY(4px);box-shadow:0 3px 0 #D9CFF2}
+.zh-opt.wrong{background:#FFE2E2;color:#E04848;box-shadow:0 7px 0 #F4B8B8;animation:shake .4s;opacity:.85}
+.zh-opt.right{background:#C9F5E5;color:#1B9C6E;box-shadow:0 7px 0 #8FE3C4}
+.zh-encour{text-align:center;font-weight:800;color:#7C5CDC;margin-top:16px;font-size:16px}
+.zh-streakbar{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;font-family:'Baloo 2';font-weight:800;color:#FF6B6B;font-size:18px;background:#fff;padding:10px 16px;border-radius:999px;box-shadow:0 5px 0 #ffd9d9}
+.zh-streakbar.idle{color:#B3A9CC;box-shadow:0 5px 0 #ECE5FA}
+.zh-streakmsg{text-align:center;font-family:'Baloo 2';font-weight:800;color:#FFB000;font-size:17px;margin-top:10px;animation:pop .5s ease}
 /* COLLECTION */
-.zh-h2{ font-family:'Baloo 2'; font-weight:800; font-size:30px; color:#7C5CDC; text-align:center; margin:8px 0; }
-.zh-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:18px; }
-.zh-cardc{ background:#fff; border-radius:22px; padding:12px 6px; text-align:center;
-  box-shadow:0 6px 0 #ECE5FA; display:flex; flex-direction:column; align-items:center; }
-.zh-cardc span{ font-family:'Baloo 2'; font-weight:700; color:#9387b3; margin-top:4px; }
-.zh-cardc.open span{ color:#3A2E5C; }
-
-/* DONE */
-.zh-done{ text-align:center; margin-top:20px; background:#fff; border-radius:30px; padding:26px;
-  box-shadow:0 9px 0 #ECE5FA; }
-.zh-bigcount{ font-family:'Baloo 2'; font-weight:800; font-size:72px; color:#FFC93C; margin:0;
-  text-shadow:0 4px 0 #F2C84B33; }
-.zh-donebtns{ display:flex; flex-direction:column; gap:12px; margin-top:18px; }
-.zh-primary{ font-family:'Baloo 2'; font-weight:800; font-size:22px; color:#fff; border:none;
-  cursor:pointer; background:#FF6B6B; padding:16px; border-radius:22px; box-shadow:0 6px 0 #E04848; }
-.zh-primary:active{ transform:translateY(3px); box-shadow:0 3px 0 #E04848; }
-.zh-ghost{ font-family:'Baloo 2'; font-weight:700; font-size:18px; color:#7C5CDC; border:none;
-  cursor:pointer; background:#F0EBFB; padding:14px; border-radius:22px; }
-
+.zh-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px}
+.zh-cardc{background:#fff;border-radius:20px;padding:10px 4px;text-align:center;box-shadow:0 6px 0 #ECE5FA;display:flex;flex-direction:column;align-items:center}
+.zh-cardc span{font-family:'Baloo 2';font-weight:700;color:#9387b3;margin-top:2px;font-size:14px}
+.zh-cardc.open span{color:#3A2E5C}
+.zh-cardc small{font-size:10px;color:#B3A9CC;font-weight:700}
+/* REPORT */
+.zh-report{padding:20px;margin-top:10px;text-align:center}
+.zh-rhead{display:flex;align-items:center;justify-content:center;gap:8px}
+.zh-bignum{font-family:'Baloo 2';font-weight:800;font-size:74px;line-height:1;color:#FFB000;text-shadow:0 4px 0 #f2c84b55;margin-top:4px;display:flex;flex-direction:column;align-items:center}
+.zh-bignum small{font-family:'Baloo 2';font-weight:700;font-size:16px;color:#9387b3;margin-top:2px}
+.zh-repdots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:280px;margin:12px auto 0}
+.zh-rdot{width:22px;height:22px;border-radius:999px}.zh-rdot.g{background:#FFC93C}.zh-rdot.e{background:#EFEAF9}
+.zh-rightlbl{font-family:'Baloo 2';font-weight:800;color:#1B9C6E;font-size:17px;margin-top:10px}
+.zh-compare{display:flex;align-items:flex-end;justify-content:center;gap:22px;margin:16px 0 4px}
+.zh-bw{display:flex;flex-direction:column;align-items:center;justify-content:flex-end}
+.zh-bn{font-family:'Baloo 2';font-weight:800;font-size:18px;margin-bottom:4px}
+.zh-bar{width:50px;border-radius:14px 14px 0 0}.zh-bar.old{background:#D9CFF2}.zh-bar.new{background:#FF8FAB}
+.zh-bw small{font-family:'Baloo 2';font-weight:700;font-size:12px;color:#9387b3;margin-top:6px}
+.zh-arrow{align-self:center;font-size:26px;color:#1B9C6E;margin-bottom:28px}
+.zh-reveal{position:relative;overflow:hidden;background:#FBF7FF;border-radius:22px;padding:14px 12px 18px;margin-top:14px}
+.zh-sunburst{position:absolute;top:54%;left:50%;width:300px;height:300px;transform:translate(-50%,-50%);background:repeating-conic-gradient(from 0deg,#FFE6A0 0deg 10deg,transparent 10deg 20deg);border-radius:50%;opacity:.55;animation:spin 16s linear infinite;-webkit-mask-image:radial-gradient(circle,#000 26%,transparent 66%);mask-image:radial-gradient(circle,#000 26%,transparent 66%);z-index:0}
+.zh-revtitle{position:relative;z-index:1;font-family:'Baloo 2';font-weight:800;font-size:22px;color:#7C5CDC;text-align:center;margin-bottom:6px;animation:pop .6s ease}
+.zh-friendrow{position:relative;z-index:1;display:flex;flex-wrap:wrap;gap:14px;justify-content:center}
+.zh-friendone{display:flex;flex-direction:column;align-items:center}
+.zh-popin{animation:popin .7s cubic-bezier(.18,1.5,.5,1) both}
+.zh-fpill{margin-top:8px;font-family:'Baloo 2';font-weight:800;font-size:17px;color:#fff;background:#FF6B6B;padding:4px 16px;border-radius:999px;box-shadow:0 4px 0 #E04848}
+.zh-spark{position:absolute;font-size:20px;z-index:1;animation:twinkle 1.4s ease-in-out infinite}
+.zh-spark.s1{top:12px;left:18px}.zh-spark.s2{top:18px;right:22px;animation-delay:.3s}
+.zh-spark.s3{bottom:14px;left:30px;animation-delay:.6s}.zh-spark.s4{bottom:20px;right:28px;animation-delay:.9s}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+@keyframes popin{0%{transform:scale(0) rotate(-12deg);opacity:0}70%{transform:scale(1.12) rotate(4deg)}100%{transform:scale(1) rotate(0);opacity:1}}
+@keyframes twinkle{0%,100%{transform:scale(.7);opacity:.4}50%{transform:scale(1.15);opacity:1}}
+.zh-newbadge{position:absolute;top:8px;right:14px;background:#FF6B6B;color:#fff;font-family:'Baloo 2';font-weight:800;font-size:13px;padding:3px 12px;border-radius:999px}
+.zh-fname{font-family:'Baloo 2';font-weight:800;font-size:18px;color:#3A2E5C;margin-top:4px}
+.zh-rbtns{display:flex;gap:12px;margin-top:18px}
+.zh-primary{flex:2;font-family:'Baloo 2';font-weight:800;font-size:22px;color:#fff;border:none;cursor:pointer;background:#FF6B6B;padding:16px;border-radius:22px;box-shadow:0 6px 0 #E04848}
+.zh-primary:active{transform:translateY(3px);box-shadow:0 3px 0 #E04848}
+.zh-ghost{flex:1;font-family:'Baloo 2';font-weight:700;font-size:24px;color:#7C5CDC;border:none;cursor:pointer;background:#F0EBFB;padding:14px;border-radius:22px}
+/* ADULT */
+.zh-block{padding:16px 18px;margin-top:14px}
+.zh-blabel{font-family:'Baloo 2';font-weight:700;color:#7C5CDC;margin:0 0 10px;font-size:16px}
+.zh-seg{display:flex;gap:8px}
+.zh-segbtn{flex:1;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:15px;color:#7C5CDC;background:#F0EBFB;padding:12px 0;border-radius:14px}
+.zh-segbtn.on{background:#7C5CDC;color:#fff}
+.zh-toggles{display:flex;gap:8px;margin-top:10px}
+.zh-tg{flex:1;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:15px;color:#7C5CDC;background:#F0EBFB;padding:12px 0;border-radius:14px}
+.zh-tg.on{background:#7C5CDC;color:#fff}
+.zh-statrow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #F0ECF8}
+.zh-srn{font-family:'Baloo 2';font-weight:800;color:#fff;background:#B8A9E0;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.zh-srname{flex:1;font-weight:700;font-size:13px;color:#3A2E5C}
+.zh-srstate{font-family:'Baloo 2';font-weight:700;font-size:13px;color:#7C5CDC}
+.zh-danger{width:100%;margin-top:16px;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:800;font-size:17px;color:#fff;background:#FF6B6B;padding:14px;border-radius:18px;box-shadow:0 5px 0 #E04848}
 /* MODAL */
-.zh-modal{ position:fixed; inset:0; background:rgba(58,46,92,.45); display:flex;
-  align-items:center; justify-content:center; padding:24px; z-index:50; }
-.zh-modalcard{ position:relative; background:#fff; border-radius:30px; padding:28px;
-  text-align:center; max-width:330px; width:100%; box-shadow:0 14px 0 #c9bff0; }
-
+.zh-modal{position:fixed;inset:0;background:rgba(58,46,92,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50}
+.zh-modalcard{position:relative;background:#fff;border-radius:28px;padding:26px;text-align:center;max-width:330px;width:100%;box-shadow:0 14px 0 #c9bff0}
 /* ANIM */
-.zh-bob{ animation:bob 2.4s ease-in-out infinite; }
-@keyframes bob{ 0%,100%{ transform:translateY(0) } 50%{ transform:translateY(-7px) } }
-@keyframes pop{ 0%{ transform:scale(1) } 40%{ transform:scale(1.06) } 100%{ transform:scale(1) } }
-@keyframes shake{ 0%,100%{ transform:translateX(0) } 20%{ transform:translateX(-7px) } 40%{ transform:translateX(7px) } 60%{ transform:translateX(-5px) } 80%{ transform:translateX(5px) } }
-@keyframes dropin{ 0%{ transform:translateY(-12px) scale(.4); opacity:0 } 100%{ transform:translateY(0) scale(1); opacity:1 } }
-
-/* CONFETTI */
-.zh-confetti{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:40; }
-.zh-confetti span{ position:absolute; top:-12px; width:11px; height:16px; border-radius:3px;
-  animation:fall 1.5s ease-in forwards; }
-@keyframes fall{ to{ transform:translateY(110vh) rotate(540deg); opacity:.2 } }
-
-@media (prefers-reduced-motion: reduce){
-  .zh-bob,.zh-confetti span,.zh-dot,.zh-problem.pop,.zh-opt.wrong{ animation:none !important; }
-}
-@media (max-width:420px){
-  .zh-equation{ font-size:42px; }
-  .zh-opt{ font-size:30px; padding:18px 0; }
-}
+.zh-bob{animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.06)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes dropin{0%{transform:translateY(-12px) scale(.4);opacity:0}100%{transform:translateY(0) scale(1);opacity:1}}
+.zh-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:40}
+.zh-confetti span{position:absolute;top:-12px;width:11px;height:16px;border-radius:3px;animation:fall 1.5s ease-in forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:.2}}
+@media (prefers-reduced-motion:reduce){.zh-bob,.zh-confetti span,.zh-dot,.zh-problem.pop,.zh-opt.wrong,.zh-sunburst,.zh-popin,.zh-spark{animation:none!important}}
+@media (max-width:420px){.zh-equation{font-size:42px}.zh-opt{font-size:30px;padding:18px 0}.zh-sname{font-size:12px}}
 `);
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
