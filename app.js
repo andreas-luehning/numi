@@ -252,10 +252,24 @@ const makeProblem = stage => {
 function getHint(p) {
   const { a, b, op } = p;
   if (op === "+") {
-    if (a < 10 && a + b > 10) { const toTen = 10 - a, rest = b - toTen; return `Erst bis zur 10: ${a} + ${toTen} = 10. Dann noch ${rest} weiter.`; }
+    // Verliebte Zahlen: zwei Summanden ergeben zusammen genau 10
+    if (a + b === 10) return `Verliebte Zahlen! ❤️ ${a} und ${b} ergeben zusammen genau 10.`;
+    // Zehnerübergang: erst die 10 voll machen (verliebte Zahl von a)
+    if (a < 10 && a + b > 10) {
+      const toTen = 10 - a, rest = b - toTen;
+      return `Mach erst die 10 voll: ${a} und ${toTen} sind verliebte Zahlen. Nimm ${toTen} von der ${b} – dann bleiben ${rest}. 10 + ${rest} = ${a + b}.`;
+    }
+    // Tauschaufgabe: von der größeren Zahl aus weiterzählen ist leichter
+    if (b > a) return `Tausch-Trick: ${b} + ${a} ist genauso viel wie ${a} + ${b}. Zähl von ${b} aus ${a} weiter.`;
     return `Zähle von ${a} aus ${b} weiter.`;
   } else {
-    if (a > 10 && a % 10 < b) { const down = a - 10, rest = b - down; return `Erst bis zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`; }
+    // Zehnerübergang nach unten: erst zur 10
+    if (a > 10 && a % 10 < b) {
+      const down = a - 10, rest = b - down;
+      return `Geh erst zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`;
+    }
+    // Ergänzen statt Wegnehmen, wenn b nah an a liegt (weniger Schritte)
+    if (a < 2 * b) return `Ergänzen: Zähl von ${b} hinauf bis ${a}. Wie viele Schritte sind das?`;
     return `Nimm ${b} von ${a} weg.`;
   }
 }
@@ -561,7 +575,7 @@ function TwentyFrame({
   for (let i = 0; i < 20; i++) {
     let s = "empty";
     if (op === "+") {
-      if (i < a) s = "a";else if (i < a + b) s = "b";
+      if (i < a) s = "a";else if (i < a + b) s = a < 10 && i < 10 && a + b >= 10 ? "partner" : "b";
     } else {
       if (i < a) s = i >= a - b ? "removed" : "a";
     }
@@ -1209,7 +1223,7 @@ function Styles() {
 .zh-cell{flex:1 1 0;aspect-ratio:1;border:2px solid #E3DBF5;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#FBFAFF}
 .zh-cell.mid{margin-left:clamp(7px,3.2vw,15px)}
 .zh-dot{width:72%;aspect-ratio:1;border-radius:999px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:clamp(9px,3vw,14px);animation:dropin .3s ease both}
-.zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-removed{background:#D7CEE8}
+.zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-partner{background:#FF8FAB;box-shadow:0 0 0 2px #fff,0 0 0 4px #FFB7C9}.zh-dot-removed{background:#D7CEE8}
 .zh-hinttext{font-weight:800;text-align:center;color:#7C5CDC;font-size:16px;margin:14px 0 0;overflow-wrap:break-word;hyphens:auto}
 .zh-options{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
 .zh-opt{font-family:'Baloo 2';font-weight:800;font-size:34px;color:#3A2E5C;border:none;cursor:pointer;background:#fff;padding:22px 0;border-radius:24px;box-shadow:0 7px 0 #D9CFF2}
