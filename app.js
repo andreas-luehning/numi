@@ -1133,12 +1133,7 @@ function App() {
     className: "zh-op"
   }, "="), React.createElement("span", {
     className: "zh-blank"
-  }, status === "right" ? p.answer : "?"))), status === "right" && React.createElement("div", {
-    className: "zh-nextbar",
-    "aria-hidden": "true"
-  }, React.createElement("div", {
-    className: "zh-nextfill"
-  })), React.createElement("div", {
+  }, status === "right" ? p.answer : "?"))), React.createElement("div", {
     className: "zh-helprow"
   }, React.createElement("button", {
     className: "zh-help",
@@ -1215,9 +1210,6 @@ function Styles() {
 .zh-doneN{font-family:'Baloo 2';font-weight:700;color:#FF6B6B;background:#fff;padding:6px 14px;border-radius:999px;box-shadow:0 4px 0 #ffd9d9;font-size:15px}
 .zh-timebar{height:12px;background:#fff;border-radius:999px;overflow:hidden;margin-top:12px;box-shadow:0 3px 0 #ECE5FA}
 .zh-timefill{height:100%;background:linear-gradient(90deg,#FFC93C,#FF8FAB);transition:width 1s linear}
-.zh-nextbar{height:8px;background:#fff;border-radius:999px;overflow:hidden;margin-top:12px;box-shadow:0 3px 0 #ECE5FA}
-.zh-nextfill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#3FBF8F,#7C5CDC);animation:nextfill 1.3s linear forwards}
-@keyframes nextfill{from{width:0}to{width:100%}}
 .zh-problem{padding:18px;margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .zh-problem.pop{animation:pop .5s ease}
 .zh-equation{display:flex;align-items:center;gap:10px;font-family:'Baloo 2';font-weight:800;font-size:50px;color:#3A2E5C}
