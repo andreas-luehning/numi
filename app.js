@@ -119,7 +119,7 @@ const gP10 = () => {
 };
 const gM10 = () => {
   const a = rand(2, 10),
-    b = rand(1, a);
+    b = rand(1, a - 1);
   return {
     a,
     b,
@@ -128,7 +128,7 @@ const gM10 = () => {
   };
 };
 const gP20 = () => {
-  const a = rand(10, 18),
+  const a = rand(10, 17),
     oa = a % 10,
     b = rand(1, 9 - oa);
   return {
@@ -238,7 +238,7 @@ const STAGES = [{
   name: "Alles gemischt bis 20",
   icon: "🎲",
   max: 20,
-  gen: () => pickFn([gP10, gM10, gP20, gM20])()
+  gen: () => pickFn([gP10, gM10, gP20, gM20, gP20Z, gM20Z])()
 }];
 const stageById = id => STAGES.find(s => s.id === id);
 const makeProblem = stage => {
@@ -252,10 +252,24 @@ const makeProblem = stage => {
 function getHint(p) {
   const { a, b, op } = p;
   if (op === "+") {
-    if (a < 10 && a + b > 10) { const toTen = 10 - a, rest = b - toTen; return `Erst bis zur 10: ${a} + ${toTen} = 10. Dann noch ${rest} weiter.`; }
-    return `Zähle von ${a} aus ${b} weiter.`;
+    // Verliebte Zahlen: zwei Summanden ergeben zusammen genau 10
+    if (a + b === 10) return `Verliebte Zahlen! ❤️ ${a} und ${b} ergeben zusammen genau 10.`;
+    // Zehnerübergang: erst die 10 voll machen (verliebte Zahl von a)
+    if (a < 10 && a + b > 10) {
+      const toTen = 10 - a, rest = b - toTen;
+      return `Mach erst die 10 voll: ${a} und ${toTen} sind verliebte Zahlen. Nimm ${toTen} von der ${b} – dann bleiben ${rest}. 10 + ${rest} = ${a + b}.`;
+    }
+    // Tauschaufgabe: von der größeren Zahl aus weiterzählen ist leichter
+    if (b > a) return `Tausch-Trick: ${b} + ${a} ist genauso viel. Zähl ab ${b} noch ${a} weiter.`;
+    return `Zähl ab ${a} noch ${b} weiter.`;
   } else {
-    if (a > 10 && a % 10 < b) { const down = a - 10, rest = b - down; return `Erst bis zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`; }
+    // Zehnerübergang nach unten: erst zur 10
+    if (a > 10 && a % 10 < b) {
+      const down = a - 10, rest = b - down;
+      return `Geh erst zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`;
+    }
+    // Ergänzen statt Wegnehmen, wenn b nah an a liegt (weniger Schritte)
+    if (a < 2 * b) return `Ergänzen: Zähl von ${b} hinauf bis ${a}. Wie viele Schritte sind das?`;
     return `Nimm ${b} von ${a} weg.`;
   }
 }
@@ -561,7 +575,7 @@ function TwentyFrame({
   for (let i = 0; i < 20; i++) {
     let s = "empty";
     if (op === "+") {
-      if (i < a) s = "a";else if (i < a + b) s = "b";
+      if (i < a) s = "a";else if (i < a + b) s = a < 10 && i < 10 && a + b >= 10 ? "partner" : "b";
     } else {
       if (i < a) s = i >= a - b ? "removed" : "a";
     }
@@ -633,6 +647,7 @@ function App() {
   const [report, setReport] = useState(null);
   const [resetAsk, setResetAsk] = useState(false);
   const soundOn = useRef(save.settings.sound);
+  const lockRef = useRef(false);
   const sessionRef = useRef({
     stageId: "p10",
     results: []
@@ -655,6 +670,7 @@ function App() {
     return () => clearInterval(id);
   }, [screen, minutes]);
   const newProblem = useCallback(() => {
+    lockRef.current = false;
     setProblem(makeProblem(stageById(stageIdRef.current)));
     setStatus("idle");
     setWrong([]);
@@ -662,6 +678,9 @@ function App() {
     setHelpUsed(false);
   }, []);
   const startSession = stageId => {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
     stageIdRef.current = stageId;
     sessionRef.current = {
       stageId,
@@ -717,8 +736,9 @@ function App() {
     if (timeUpRef.current) finishSession();else newProblem();
   }, [finishSession, newProblem]);
   const handlePick = opt => {
-    if (status === "right") return;
+    if (status === "right" || lockRef.current) return;
     if (opt === problem.answer) {
+      lockRef.current = true;
       const category = helpUsed ? "help" : (wrong.length === 0 ? "clean" : "retry");
       const clean = category === "clean";
       const newStreak = clean ? streak + 1 : 0;
@@ -890,6 +910,7 @@ function App() {
     const r = report;
     const maxv = Math.max(r.done, r.prevDone || 0, 1);
     const more = r.prevDone != null && r.done > r.prevDone;
+    const celebrate = r.newFriends.length > 0 || r.done > 0 && r.correct / r.done >= 0.7;
     return React.createElement("div", {
       className: "zh-root"
     }, React.createElement(Header, {
@@ -897,7 +918,7 @@ function App() {
     }), React.createElement("main", {
       className: "zh-main"
     }, React.createElement(Confetti, {
-      show: true
+      show: celebrate
     }), React.createElement("div", {
       className: "zh-card zh-report"
     }, React.createElement("div", {
@@ -1063,6 +1084,7 @@ function App() {
       onClick: () => setResetAsk(false)
     }, "Abbrechen")))), React.createElement(Styles, null)));
   }
+  if (!problem) return null;
   const p = problem;
   const timePct = minutes > 0 ? Math.min(100, elapsed / (minutes * 60) * 100) : 0;
   return React.createElement("div", {
@@ -1103,7 +1125,12 @@ function App() {
     className: "zh-op"
   }, "="), React.createElement("span", {
     className: "zh-blank"
-  }, status === "right" ? p.answer : "?"))), React.createElement("div", {
+  }, status === "right" ? p.answer : "?"))), status === "right" && React.createElement("div", {
+    className: "zh-nextbar",
+    "aria-hidden": "true"
+  }, React.createElement("div", {
+    className: "zh-nextfill"
+  })), React.createElement("div", {
     className: "zh-helprow"
   }, React.createElement("button", {
     className: "zh-help",
@@ -1132,7 +1159,7 @@ function App() {
     }, opt);
   })), status !== "right" && wrong.length > 0 && React.createElement("p", {
     className: "zh-encour"
-  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal. \uD83D\uDCAA"), !streakMsg && React.createElement("div", {
+  }, "Fast! Schau ins Zwanzigerfeld und probier nochmal."), !streakMsg && React.createElement("div", {
     className: `zh-streakbar${streak >= 1 ? "" : " idle"}`
   }, streak >= 1 ? `🔥 ${streak} richtig in Folge` : "🔥 Sammle eine Serie"), streakMsg && React.createElement("div", {
     className: "zh-streakmsg"
@@ -1158,7 +1185,7 @@ function Styles() {
 .zh-recicon{font-size:34px;width:60px;height:60px;display:flex;align-items:center;justify-content:center;background:#FFE08A;border-radius:20px}
 .zh-rectext{display:flex;flex-direction:column;flex:1}
 .zh-rectext small{font-weight:700;color:#9387b3;font-size:13px}
-.zh-rectext strong{font-family:'Baloo 2';font-size:21px;color:#3A2E5C;line-height:1.1}
+.zh-rectext strong{font-family:'Baloo 2';font-size:clamp(16px,4vw,21px);color:#3A2E5C;line-height:1.1;hyphens:auto;overflow-wrap:break-word}
 .zh-recgo{font-family:'Baloo 2';font-weight:800;color:#fff;background:#FF6B6B;padding:10px 18px;border-radius:999px;font-size:18px;box-shadow:0 4px 0 #E04848}
 .zh-section{font-family:'Baloo 2';font-weight:700;color:#9387b3;font-size:14px;margin:22px 4px 8px;text-transform:uppercase;letter-spacing:1px}
 .zh-stages{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -1180,6 +1207,9 @@ function Styles() {
 .zh-doneN{font-family:'Baloo 2';font-weight:700;color:#FF6B6B;background:#fff;padding:6px 14px;border-radius:999px;box-shadow:0 4px 0 #ffd9d9;font-size:15px}
 .zh-timebar{height:12px;background:#fff;border-radius:999px;overflow:hidden;margin-top:12px;box-shadow:0 3px 0 #ECE5FA}
 .zh-timefill{height:100%;background:linear-gradient(90deg,#FFC93C,#FF8FAB);transition:width 1s linear}
+.zh-nextbar{height:8px;background:#fff;border-radius:999px;overflow:hidden;margin-top:12px;box-shadow:0 3px 0 #ECE5FA}
+.zh-nextfill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#3FBF8F,#7C5CDC);animation:nextfill 1.3s linear forwards}
+@keyframes nextfill{from{width:0}to{width:100%}}
 .zh-problem{padding:18px;margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:6px}
 .zh-problem.pop{animation:pop .5s ease}
 .zh-equation{display:flex;align-items:center;gap:10px;font-family:'Baloo 2';font-weight:800;font-size:50px;color:#3A2E5C}
@@ -1193,8 +1223,8 @@ function Styles() {
 .zh-cell{flex:1 1 0;aspect-ratio:1;border:2px solid #E3DBF5;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#FBFAFF}
 .zh-cell.mid{margin-left:clamp(7px,3.2vw,15px)}
 .zh-dot{width:72%;aspect-ratio:1;border-radius:999px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:clamp(9px,3vw,14px);animation:dropin .3s ease both}
-.zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-removed{background:#D7CEE8}
-.zh-hinttext{font-weight:800;text-align:center;color:#7C5CDC;font-size:16px;margin:14px 0 0}
+.zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-partner{background:#FF8FAB;box-shadow:0 0 0 2px #fff,0 0 0 4px #FFB7C9}.zh-dot-removed{background:#D7CEE8}
+.zh-hinttext{font-weight:800;text-align:center;color:#7C5CDC;font-size:16px;margin:14px 0 0;overflow-wrap:break-word;hyphens:auto}
 .zh-options{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
 .zh-opt{font-family:'Baloo 2';font-weight:800;font-size:34px;color:#3A2E5C;border:none;cursor:pointer;background:#fff;padding:22px 0;border-radius:24px;box-shadow:0 7px 0 #D9CFF2}
 .zh-opt:active{transform:translateY(4px);box-shadow:0 3px 0 #D9CFF2}
@@ -1215,7 +1245,7 @@ function Styles() {
 .zh-rhead{display:flex;align-items:center;justify-content:center;gap:8px}
 .zh-bignum{font-family:'Baloo 2';font-weight:800;font-size:74px;line-height:1;color:#FFB000;text-shadow:0 4px 0 #f2c84b55;margin-top:4px;display:flex;flex-direction:column;align-items:center}
 .zh-bignum small{font-family:'Baloo 2';font-weight:700;font-size:16px;color:#9387b3;margin-top:2px}
-.zh-repdots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:280px;margin:12px auto 0}
+.zh-repdots{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;max-width:min(320px,90vw);margin:12px auto 0}
 .zh-rdot{display:inline-block;width:22px;height:22px;border-radius:999px}.zh-rdot.g{background:#FFC93C}.zh-rdot.e{background:#EFEAF9}
 .zh-rdot.clean{background:#FFC93C}.zh-rdot.help{background:#FF9F1C}.zh-rdot.retry{background:#E3DBF5}
 .zh-repdots.small .zh-rdot{width:16px;height:16px}
