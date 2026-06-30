@@ -252,24 +252,32 @@ const makeProblem = stage => {
 function getHint(p) {
   const { a, b, op } = p;
   if (op === "+") {
-    // Verliebte Zahlen: zwei Summanden ergeben zusammen genau 10
-    if (a + b === 10) return `Verliebte Zahlen! ❤️ ${a} und ${b} ergeben zusammen genau 10.`;
-    // Zehnerübergang: erst die 10 voll machen (verliebte Zahl von a)
-    if (a < 10 && a + b > 10) {
-      const toTen = 10 - a, rest = b - toTen;
-      return `Mach erst die 10 voll: ${a} und ${toTen} sind verliebte Zahlen. Nimm ${toTen} von der ${b} – dann bleiben ${rest}. 10 + ${rest} = ${a + b}.`;
+    // 1) Verliebte Zahlen
+    if (a + b === 10) return `Verliebte Zahlen! ❤️ ${a} und ${b} ergeben zusammen die 10.`;
+    // 2) Doppel
+    if (a === b) return `Das ist ein Doppel: ${a} + ${a}.`;
+    // 3) Zehner vollmachen – nur bei echtem Einer-Übergang (beide < 10), Ergebnis NICHT verraten
+    if (a + b > 10 && a < 10 && b < 10) {
+      const big = Math.max(a, b), small = Math.min(a, b);
+      const toTen = 10 - big;        // was der Großen zur 10 fehlt
+      const rest = small - toTen;    // Rest aus der kleinen Zahl
+      return `Mach erst die 10 voll: ${big} braucht noch ${toTen}. Zerlege die ${small} in ${toTen} und ${rest}. Dann 10 und noch ${rest}.`;
     }
-    // Tauschaufgabe: von der größeren Zahl aus weiterzählen ist leichter
+    // 4) Tausch-Trick
     if (b > a) return `Tausch-Trick: ${b} + ${a} ist genauso viel. Zähl ab ${b} noch ${a} weiter.`;
+    // 5) Weiterzählen
     return `Zähl ab ${a} noch ${b} weiter.`;
   } else {
-    // Zehnerübergang nach unten: erst zur 10
+    // 1) Halbieren / Doppel
+    if (a === 2 * b) return `Denk ans Doppel: ${b} + ${b} = ${a}.`;
+    // 2) Ergänzen – nur bei kleiner Differenz (Ergebnis <= 3)
+    if (a - b <= 3) return `Ergänzen: Zähl von ${b} hinauf bis ${a}. Wie viele Schritte sind das?`;
+    // 3) Erst zur 10 – Ergebnis NICHT verraten
     if (a > 10 && a % 10 < b) {
       const down = a - 10, rest = b - down;
       return `Geh erst zur 10: ${a} − ${down} = 10. Dann noch ${rest} weniger.`;
     }
-    // Ergänzen statt Wegnehmen, wenn b nah an a liegt (weniger Schritte)
-    if (a < 2 * b) return `Ergänzen: Zähl von ${b} hinauf bis ${a}. Wie viele Schritte sind das?`;
+    // 4) Wegnehmen
     return `Nimm ${b} von ${a} weg.`;
   }
 }
