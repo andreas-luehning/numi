@@ -1,5 +1,5 @@
 // Numi – Offline-Cache
-const CACHE = "numi-v10";
+const CACHE = "numi-v11";
 const ASSETS = [
   "./",
   "index.html",

@@ -4,6 +4,7 @@ const {
   useEffect,
   useCallback
 } = React;
+const APP_VERSION = "v11";
 const KEY = "numi-save-v1";
 const store = {
   get(def) {
@@ -1090,7 +1091,9 @@ function App() {
     }, "Ja, l\xF6schen"), React.createElement("button", {
       className: "zh-ghost",
       onClick: () => setResetAsk(false)
-    }, "Abbrechen")))), React.createElement(Styles, null)));
+    }, "Abbrechen")))), React.createElement("p", {
+      className: "zh-version"
+    }, `Numi ${APP_VERSION}`), React.createElement(Styles, null)));
   }
   if (!problem) return null;
   const p = problem;
@@ -1281,6 +1284,7 @@ function Styles() {
 /* ADULT */
 .zh-block{padding:16px 18px;margin-top:14px}
 .zh-blabel{font-family:'Baloo 2';font-weight:700;color:#7C5CDC;margin:0 0 10px;font-size:16px}
+.zh-version{text-align:center;color:#B7AECF;font-size:12px;margin:14px 0 4px}
 .zh-seg{display:flex;gap:8px}
 .zh-segbtn{flex:1;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:700;font-size:15px;color:#7C5CDC;background:#F0EBFB;padding:12px 0;border-radius:14px}
 .zh-segbtn.on{background:#7C5CDC;color:#fff}
