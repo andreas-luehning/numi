@@ -4,7 +4,7 @@ const {
   useEffect,
   useCallback
 } = React;
-const APP_VERSION = "v14";
+const APP_VERSION = "v15";
 const KEY = "numi-save-v1";
 const store = {
   get(def) {
@@ -243,6 +243,10 @@ const STAGES = [{
   gen: () => pickFn([gP10, gM10, gP20, gM20, gP20Z, gM20Z])()
 }];
 const stageById = id => STAGES.find(s => s.id === id);
+const achievementText = i => {
+  if (i < STAGES.length) return `Stufe geschafft: ${STAGES[i].name} ✓`;
+  return ["Alles bis 10 geschafft!", "Ohne Übergang geschafft!", "Heft komplett!"][i - STAGES.length];
+};
 function fmtDuration(sec) {
   const s = Math.max(0, Math.round(sec));
   const m = Math.floor(s / 60);
@@ -672,6 +676,7 @@ function App() {
   const [streakMsg, setStreakMsg] = useState(null);
   const [helpUsed, setHelpUsed] = useState(false);
   const [report, setReport] = useState(null);
+  const [friendPopup, setFriendPopup] = useState(null);
   const [resetAsk, setResetAsk] = useState(false);
   const soundOn = useRef(save.settings.sound);
   const lockRef = useRef(false);
@@ -718,6 +723,7 @@ function App() {
     setElapsed(0);
     setDoneCount(0);
     setStreak(0);
+    setFriendPopup(null);
     newProblem();
     setScreen("play");
   };
@@ -793,6 +799,12 @@ function App() {
         setStreakMsg(`🔥 ${newStreak} in Folge! +5 ⭐`);
         setTimeout(() => setStreakMsg(null), 1800);
       }
+      const before = computeUnlocked(saveRef.current.stages);
+      const after = computeUnlocked({
+        ...saveRef.current.stages,
+        [sid]: newSt
+      });
+      const justUnlocked = after.filter(i => !before.includes(i));
       setSave(prev => ({
         ...prev,
         stars: prev.stars + 1 + bonus,
@@ -802,7 +814,14 @@ function App() {
         }
       }));
       setTimeout(() => setConfetti(false), 1100);
-      setTimeout(advance, 1350);
+      if (justUnlocked.length) {
+        setTimeout(() => {
+          setFriendPopup(justUnlocked);
+          play("unlock");
+        }, 700);
+      } else {
+        setTimeout(advance, 1350);
+      }
     } else {
       play("retry");
       setShowHelp(true);
@@ -1048,7 +1067,7 @@ function App() {
         setScreen("home");
       }
     }, React.createElement(Mascot, {
-      size: 44,
+      size: 50,
       bob: false
     })))), React.createElement(Styles, null)));
   }
@@ -1220,7 +1239,39 @@ function App() {
     className: `zh-streakbar${streak >= 1 ? "" : " idle"}`
   }, streak >= 1 ? `🔥 ${streak} richtig in Folge` : "🔥 Sammle eine Serie"), streakMsg && React.createElement("div", {
     className: "zh-streakmsg"
-  }, streakMsg), React.createElement(Styles, null)));
+  }, streakMsg), friendPopup && React.createElement("div", {
+    className: "zh-modal"
+  }, React.createElement("div", {
+    className: "zh-modalcard zh-friendpop"
+  }, React.createElement("div", {
+    className: "zh-sunburst",
+    "aria-hidden": "true"
+  }), React.createElement("div", {
+    className: "zh-revtitle"
+  }, "🎉 Du hast einen neuen Freund!"), React.createElement("div", {
+    className: "zh-friendrow"
+  }, friendPopup.map(i => React.createElement("div", {
+    key: i,
+    className: "zh-friendone zh-popin"
+  }, React.createElement(Creature, {
+    c: CREATURES[i],
+    size: friendPopup.length > 1 ? 66 : 96,
+    bob: true
+  }), React.createElement("div", {
+    className: "zh-fpill"
+  }, CREATURES[i].name)))), React.createElement("div", {
+    className: "zh-achieverow"
+  }, friendPopup.map(i => React.createElement("p", {
+    key: i,
+    className: "zh-achieve"
+  }, achievementText(i)))), React.createElement("button", {
+    className: "zh-primary zh-popcont",
+    onClick: () => {
+      play("tap");
+      setFriendPopup(null);
+      advance();
+    }
+  }, "Weiter rechnen ▶"))), React.createElement(Styles, null)));
 }
 function Styles() {
   return React.createElement("style", null, `
@@ -1337,7 +1388,7 @@ function Styles() {
 .zh-ghost{flex:1;font-family:'Baloo 2';font-weight:700;font-size:24px;color:#7C5CDC;border:none;cursor:pointer;background:#F0EBFB;padding:14px;border-radius:22px;box-shadow:0 6px 0 #C9BFF0}
 .zh-ghost:active{transform:translateY(3px);box-shadow:0 3px 0 #C9BFF0}
 /* ADULT */
-.zh-block{padding:16px 18px;margin-top:14px}
+.zh-block{padding:16px 18px;margin-top:14px;box-shadow:0 9px 0 #E0D8F2}
 .zh-blabel{font-family:'Baloo 2';font-weight:700;color:#7C5CDC;margin:0 0 10px;font-size:16px}
 .zh-version{text-align:center;color:#B7AECF;font-size:12px;margin:14px 0 4px}
 .zh-seg{display:flex;gap:8px}
@@ -1360,6 +1411,10 @@ function Styles() {
 /* MODAL */
 .zh-modal{position:fixed;inset:0;background:rgba(58,46,92,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50}
 .zh-modalcard{position:relative;background:#fff;border-radius:28px;padding:26px;text-align:center;max-width:330px;width:100%;box-shadow:0 14px 0 #c9bff0}
+.zh-friendpop{overflow:hidden;max-width:360px}
+.zh-achieverow{position:relative;z-index:1;margin-top:10px}
+.zh-achieve{font-family:'Baloo 2';font-weight:800;color:#7C5CDC;font-size:15px;margin:4px 0 0}
+.zh-popcont{position:relative;z-index:1;margin-top:18px;width:100%}
 /* ANIM */
 .zh-bob{animation:bob 2.4s ease-in-out infinite}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
