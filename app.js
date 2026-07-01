@@ -4,7 +4,7 @@ const {
   useEffect,
   useCallback
 } = React;
-const APP_VERSION = "v12";
+const APP_VERSION = "v13";
 const KEY = "numi-save-v1";
 const store = {
   get(def) {
@@ -1041,11 +1041,14 @@ function App() {
       }
     }, "Nochmal \u25B6"), React.createElement("button", {
       className: "zh-ghost",
+      "aria-label": "Zur Startseite",
       onClick: () => {
         play("tap");
         setScreen("home");
       }
-    }, "\uD83C\uDFE0"))), React.createElement(Styles, null)));
+    }, React.createElement(Mascot, {
+      size: 32
+    })))), React.createElement(Styles, null)));
   }
   if (screen === "adult") {
     return React.createElement("div", {
@@ -1063,26 +1066,6 @@ function App() {
     }, "\u2039 Zur\xFCck"), React.createElement("h2", {
       className: "zh-h2"
     }, "F\xFCr Erwachsene"), React.createElement("div", {
-      className: "zh-card zh-block"
-    }, React.createElement("p", {
-      className: "zh-blabel"
-    }, "Letzte \xDCbungen"), (save.history || []).length === 0 ? React.createElement("p", {
-      className: "zh-histempty"
-    }, "Noch keine \xDCbungen") : (save.history || []).map((h, i) => {
-      const s = stageById(h.stageId);
-      return React.createElement("div", {
-        key: i,
-        className: "zh-histrow"
-      }, React.createElement("span", {
-        className: "zh-histday"
-      }, fmtDay(h.ts)), React.createElement("span", {
-        className: "zh-histname"
-      }, s ? s.name : h.stageId), React.createElement("span", {
-        className: "zh-histdur"
-      }, "⏱ ", fmtDuration(h.durationSec)), React.createElement("span", {
-        className: "zh-histscore"
-      }, h.correct, "/", h.done, " richtig"));
-    })), React.createElement("div", {
       className: "zh-card zh-block"
     }, React.createElement("p", {
       className: "zh-blabel"
@@ -1116,6 +1099,26 @@ function App() {
       }, s.name), React.createElement("span", {
         className: "zh-srstate"
       }, st.gold ? "⭐ Gold" : st.mastered ? "✓ sicher" : st.att ? `${st.ok}/${st.att}` : "–"));
+    })), React.createElement("div", {
+      className: "zh-card zh-block"
+    }, React.createElement("p", {
+      className: "zh-blabel"
+    }, "Letzte \xDCbungen"), (save.history || []).length === 0 ? React.createElement("p", {
+      className: "zh-histempty"
+    }, "Noch keine \xDCbungen") : (save.history || []).map((h, i) => {
+      const s = stageById(h.stageId);
+      return React.createElement("div", {
+        key: i,
+        className: "zh-histrow"
+      }, React.createElement("span", {
+        className: "zh-histday"
+      }, fmtDay(h.ts)), React.createElement("span", {
+        className: "zh-histname"
+      }, s ? s.name : h.stageId), React.createElement("span", {
+        className: "zh-histdur"
+      }, "⏱ ", fmtDuration(h.durationSec)), React.createElement("span", {
+        className: "zh-histscore"
+      }, h.correct, "/", h.done, " richtig"));
     })), React.createElement("button", {
       className: "zh-danger",
       onClick: () => setResetAsk(true)
