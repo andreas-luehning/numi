@@ -4,7 +4,7 @@ const {
   useEffect,
   useCallback
 } = React;
-const APP_VERSION = "v11";
+const APP_VERSION = "v12";
 const KEY = "numi-save-v1";
 const store = {
   get(def) {
@@ -32,6 +32,7 @@ const defaultSave = () => ({
   stages: {},
   last: null,
   best: 0,
+  history: [],
   settings: {
     minutes: 5,
     sound: true,
@@ -242,6 +243,21 @@ const STAGES = [{
   gen: () => pickFn([gP10, gM10, gP20, gM20, gP20Z, gM20Z])()
 }];
 const stageById = id => STAGES.find(s => s.id === id);
+function fmtDuration(sec) {
+  const s = Math.max(0, Math.round(sec));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}:${String(r).padStart(2, "0")}`;
+}
+function fmtDay(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  const midnight = t => new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime();
+  const days = Math.round((midnight(now) - midnight(d)) / 86400000);
+  if (days === 0) return "Heute";
+  if (days === 1) return "Gestern";
+  return d.toLocaleDateString("de-DE", { day: "numeric", month: "short" });
+}
 const makeProblem = stage => {
   const base = stage.gen();
   return {
@@ -254,7 +270,7 @@ function getHint(p) {
   const { a, b, op } = p;
   if (op === "+") {
     // 1) Verliebte Zahlen
-    if (a + b === 10) return `Verliebte Zahlen! ❤️ ${a} und ${b} ergeben zusammen die 10.`;
+    if (a + b === 10) return `Verliebte Zahlen! ${a} und ${b} ergeben zusammen die 10.`;
     // 2) Doppel
     if (a === b) return `Das ist ein Doppel: ${a} + ${a}.`;
     // 3) Zehner vollmachen – nur bei echtem Einer-Übergang (beide < 10), Ergebnis NICHT verraten
@@ -580,11 +596,12 @@ function TwentyFrame({
     b,
     op
   } = p;
+  const love = op === "+" && a + b === 10;
   const cells = [];
   for (let i = 0; i < 20; i++) {
     let s = "empty";
     if (op === "+") {
-      if (i < a) s = "a";else if (i < a + b) s = a < 10 && i < 10 && a + b >= 10 ? "partner" : "b";
+      if (i < a) s = "a";else if (i < a + b) s = !love && a < 10 && i < 10 && a + b >= 10 ? "partner" : "b";
     } else {
       if (i < a) s = i >= a - b ? "removed" : "a";
     }
@@ -603,7 +620,7 @@ function TwentyFrame({
       key: i,
       className: `zh-cell${c === 5 ? " mid" : ""}`
     }, reveal && s !== "empty" && React.createElement("span", {
-      className: `zh-dot zh-dot-${s}`,
+      className: `zh-dot zh-dot-${s}${love && s === "a" ? " love-a" : ""}${love && s === "b" ? " love-b" : ""}`,
       style: {
         animationDelay: `${i * 40}ms`
       }
@@ -693,7 +710,8 @@ function App() {
     stageIdRef.current = stageId;
     sessionRef.current = {
       stageId,
-      results: []
+      results: [],
+      startTs: Date.now()
     };
     unlockedAtStart.current = computeUnlocked(saveRef.current.stages);
     setElapsed(0);
@@ -720,13 +738,21 @@ function App() {
     const unlockedNow = computeUnlocked(cur.stages);
     const newFriends = unlockedNow.filter(i => !unlockedAtStart.current.includes(i));
     const prevDone = cur.last ? cur.last.done : null;
+    const durationSec = Math.round((Date.now() - (sess.startTs || Date.now())) / 1000);
     setSave(prev => ({
       ...prev,
       last: {
         done,
         correct
       },
-      best: Math.max(prev.best, done)
+      best: Math.max(prev.best, done),
+      history: done > 0 ? [{
+        ts: Date.now(),
+        stageId: sess.stageId,
+        done,
+        correct,
+        durationSec
+      }, ...(prev.history || [])].slice(0, 10) : (prev.history || [])
     }));
     setReport({
       done,
@@ -1040,6 +1066,26 @@ function App() {
       className: "zh-card zh-block"
     }, React.createElement("p", {
       className: "zh-blabel"
+    }, "Letzte \xDCbungen"), (save.history || []).length === 0 ? React.createElement("p", {
+      className: "zh-histempty"
+    }, "Noch keine \xDCbungen") : (save.history || []).map((h, i) => {
+      const s = stageById(h.stageId);
+      return React.createElement("div", {
+        key: i,
+        className: "zh-histrow"
+      }, React.createElement("span", {
+        className: "zh-histday"
+      }, fmtDay(h.ts)), React.createElement("span", {
+        className: "zh-histname"
+      }, s ? s.name : h.stageId), React.createElement("span", {
+        className: "zh-histdur"
+      }, "⏱ ", fmtDuration(h.durationSec)), React.createElement("span", {
+        className: "zh-histscore"
+      }, h.correct, "/", h.done, " richtig"));
+    })), React.createElement("div", {
+      className: "zh-card zh-block"
+    }, React.createElement("p", {
+      className: "zh-blabel"
     }, "Sitzungsl\xE4nge"), React.createElement("div", {
       className: "zh-seg"
     }, [3, 5, 10, 0].map(m => React.createElement("button", {
@@ -1227,6 +1273,10 @@ function Styles() {
 .zh-cell.mid{margin-left:clamp(7px,3.2vw,15px)}
 .zh-dot{width:72%;aspect-ratio:1;border-radius:999px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:clamp(9px,3vw,14px);animation:dropin .3s ease both}
 .zh-dot-a{background:#FF6B6B}.zh-dot-b{background:#5AB2FF}.zh-dot-partner{background:#FF8FAB;box-shadow:0 0 0 2px #fff,0 0 0 4px #FFB7C9}.zh-dot-removed{background:#D7CEE8}
+.zh-dot.love-a{background:#FF8A8A;animation:love-a 3.6s ease-in-out infinite}
+.zh-dot.love-b{background:#8AC5FF;animation:love-b 3.6s ease-in-out infinite}
+@keyframes love-a{0%,100%{background:#FF8A8A}50%{background:#FF5C9E}}
+@keyframes love-b{0%,100%{background:#8AC5FF}50%{background:#FF5C9E}}
 .zh-hinttext{font-weight:800;text-align:center;color:#7C5CDC;font-size:16px;margin:14px 0 0;overflow-wrap:break-word;hyphens:auto}
 .zh-options{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
 .zh-opt{font-family:'Baloo 2';font-weight:800;font-size:34px;color:#3A2E5C;border:none;cursor:pointer;background:#fff;padding:22px 0;border-radius:24px;box-shadow:0 7px 0 #D9CFF2}
@@ -1295,6 +1345,12 @@ function Styles() {
 .zh-srn{font-family:'Baloo 2';font-weight:800;color:#fff;background:#B8A9E0;width:24px;height:24px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
 .zh-srname{flex:1;font-weight:700;font-size:13px;color:#3A2E5C}
 .zh-srstate{font-family:'Baloo 2';font-weight:700;font-size:13px;color:#7C5CDC}
+.zh-histrow{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #F0ECF8}
+.zh-histday{font-family:'Baloo 2';font-weight:700;font-size:13px;color:#9387b3;width:60px;flex-shrink:0}
+.zh-histname{flex:1;font-weight:700;font-size:13px;color:#3A2E5C;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.zh-histdur{font-family:'Baloo 2';font-weight:700;font-size:13px;color:#7C5CDC;flex-shrink:0}
+.zh-histscore{font-family:'Baloo 2';font-weight:700;font-size:13px;color:#1B9C6E;flex-shrink:0}
+.zh-histempty{font-weight:700;color:#B3A9CC;font-size:14px;margin:4px 0}
 .zh-danger{width:100%;margin-top:16px;border:none;cursor:pointer;font-family:'Baloo 2';font-weight:800;font-size:17px;color:#fff;background:#FF6B6B;padding:14px;border-radius:18px;box-shadow:0 5px 0 #E04848}
 /* MODAL */
 .zh-modal{position:fixed;inset:0;background:rgba(58,46,92,.45);display:flex;align-items:center;justify-content:center;padding:24px;z-index:50}
@@ -1308,7 +1364,7 @@ function Styles() {
 .zh-confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:40}
 .zh-confetti span{position:absolute;top:-12px;width:11px;height:16px;border-radius:3px;animation:fall 1.5s ease-in forwards}
 @keyframes fall{to{transform:translateY(110vh) rotate(540deg);opacity:.2}}
-@media (prefers-reduced-motion:reduce){.zh-bob,.zh-confetti span,.zh-dot,.zh-problem.pop,.zh-opt.wrong,.zh-sunburst,.zh-popin,.zh-spark{animation:none!important}}
+@media (prefers-reduced-motion:reduce){.zh-bob,.zh-confetti span,.zh-dot,.zh-dot.love-a,.zh-dot.love-b,.zh-problem.pop,.zh-opt.wrong,.zh-sunburst,.zh-popin,.zh-spark{animation:none!important}}
 @media (max-width:420px){.zh-equation{font-size:42px}.zh-opt{font-size:30px;padding:18px 0}.zh-sname{font-size:12px}}
 `);
 }
