@@ -4,7 +4,7 @@ const {
   useEffect,
   useCallback
 } = React;
-const APP_VERSION = "v13";
+const APP_VERSION = "v14";
 const KEY = "numi-save-v1";
 const store = {
   get(def) {
@@ -522,10 +522,11 @@ function Creature({
 }
 function Mascot({
   size = 110,
-  mood = "happy"
+  mood = "happy",
+  bob = true
 }) {
   return React.createElement("svg", {
-    className: "zh-bob",
+    className: bob ? "zh-bob" : "",
     width: size,
     height: size,
     viewBox: "0 0 120 120"
@@ -1047,7 +1048,8 @@ function App() {
         setScreen("home");
       }
     }, React.createElement(Mascot, {
-      size: 32
+      size: 44,
+      bob: false
     })))), React.createElement(Styles, null)));
   }
   if (screen === "adult") {
